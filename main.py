@@ -109,7 +109,7 @@ def numpy_to_tensor(np_array):
     return tensor
 
 # Import image
-image_path = r'C:\Users\Austin\OneDrive\Documents\Personal Projects\GitHub\EarlyDeforestationDetection\DataSet\not_deforested\Landsat8_SamHouston_2013-6-14.tif'
+image_path = r'E:\DataSet\not_deforested\Landsat8_SamHouston_2013-6-14.tif'
 np_array = load_tiff_to_numpy(image_path)
 print("Numpy Array Shape:", np_array.shape)
 

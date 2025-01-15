@@ -3,44 +3,30 @@
 # Date: 10/01/2024
 # Design and train a CNN to detect future deforestation hotspots
 
+import os
 import torch
 import numpy as np
 import tifffile as tiff
 import DatasetClass as ds
+from torch import nn
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
 
 # # Prepare your data transformations
-
-# # Define your CNN model
-
-# # Initialize the model, loss function, and optimizer
-
-# # Training loop
-
-
-# def load_tiff_to_numpy(image_path):
-#     # Open the TIFF image
-#     img_array = tiff.imread(image_path)
-
-#     # Handle NaNs
-#     img_array = np.nan_to_num(img_array, nan=0.0)
-
-#     # Normalize and clip values to the 0-255 rang
-#     img_array = np.clip(img_array, 0, 255)
-
-#     # Convert the array to uint8
-#     if img_array.dtype != np.uint8:
-#         img_array = img_array.astype(np.uint8)
-    
-#     return img_array
-
-# # Import image
-# image_path = r'E:\DataSet\\not_deforested\\Landsat8_SamHouston_2013-6-14.tif'
-# np_array = load_tiff_to_numpy(image_path)
-# print("Numpy Array Shape:", np_array.shape)
-
 csv_file_path = 'E:\labels.csv'
 transform = None
 dataset = ds.DeforestationDataset(csv_file=csv_file_path, transform=transform)
+
+# Check to see if torch.cuda or torhc.backends.mps are available
+device = (
+    "cuda"
+    if torch.cuda.is_available()
+    else "mps"
+    if torch.backends.mps.is_available()
+    else "cpu"
+)
+print(f"Using {device} device")
+
 
 
 # Test convertion to tensor
@@ -49,6 +35,13 @@ for i in range(len(dataset)):
     print("Before image shape:", before_image.shape)
     print("After image shape:", after_image.shape)
     print("Label:", label)
+
+# # Define your CNN model
+
+# # Initialize the model, loss function, and optimizer
+
+# # Training loop
+
 
 
 

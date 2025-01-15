@@ -2,10 +2,11 @@ import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import tifffile as tiff
+import torch
 import os
 
 # Function to load TIFF image and process it
-def load_tiff_to_numpy(image_path):
+def load_tiff_to_tensor(image_path):
     # Open the TIFF image
     img_array = tiff.imread(image_path)
 
@@ -18,8 +19,11 @@ def load_tiff_to_numpy(image_path):
     # Convert the array to uint8
     if img_array.dtype != np.uint8:
         img_array = img_array.astype(np.uint8)
+
+    # Convert the Numpy array to a PyTorch tensor
+    img_tensor = torch.from_numpy(img_array)
     
-    return img_array
+    return img_tensor
 
 # Sanitize file paths
 def sanitize_path(path):
@@ -40,8 +44,9 @@ class DeforestationDataset(Dataset):
         after_img_path = sanitize_path(self.data.iloc[idx, 1])
         print(f'Before image path: {before_img_path}')
         print(f'After image path: {after_img_path}')
-        before_image = load_tiff_to_numpy(before_img_path)
-        after_image = load_tiff_to_numpy(after_img_path)
+        
+        before_image = load_tiff_to_tensor(before_img_path)
+        after_image = load_tiff_to_tensor(after_img_path)
         label = self.data.iloc[idx, 2] if 'label' in self.data.columns else None
 
         if self.transform:

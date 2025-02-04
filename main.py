@@ -28,7 +28,6 @@ device = (
 print(f"Using {device} device")
 
 
-
 # Test convertion to tensor
 for i in range(len(dataset)):
     before_image, after_image, label = dataset[i]
@@ -36,7 +35,6 @@ for i in range(len(dataset)):
     print("After image shape:", after_image.shape)
     print("Label:", label)
 
-# # Define your CNN model
 
 # # Initialize the model, loss function, and optimizer
 

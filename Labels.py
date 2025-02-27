@@ -4,7 +4,7 @@ import pandas as pd
 df = pd.read_csv('E:\\Para_Data.csv')
 
 # Base path and file name pattern
-base_path = 'E:\\Sentinelv3\\Para_2015_2016\\ROI_Para_2015_2016_Tile_'
+base_path = 'E:\\Sentinelv3\\Para_2015_2016\\ROI_Para_2017_2018_Tile-v2_'
 file_extension = '.tif'
 
 # Create a list to store the dynamic values
@@ -22,7 +22,7 @@ df.iloc[:100, 0] = dynamic_values
 print(df.head(105))
 
 # Save the updated data frame back to a new CSV file
-output_path = 'C:\\Users\\Austin\\OneDrive\\Documents\\Personal Projects\\GitHub\\EarlyDeforestationDetection\\Para_Data_Updated.csv'
+output_path = 'C:\\Users\\Austin\\OneDrive\\Documents\\Personal Projects\\GitHub\\EarlyDeforestationDetection\\Para_Data_2017_2018.csv'
 df.to_csv(output_path, index=False)
 
 print(f"Updated CSV file saved to: {output_path}")

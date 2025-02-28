@@ -44,7 +44,7 @@ input_size = inputs.shape[1]
 model = SimpleNN(input_size).to(device)
 
 # Load the trained model
-model.load_state_dict(torch.load('resnet50_deforestation_model.pth', map_location=device))
+model.load_state_dict(torch.load('deforestation_prediction_model.pth', map_location=device))
 model.eval()
 
 # Convert input data to torch tensors

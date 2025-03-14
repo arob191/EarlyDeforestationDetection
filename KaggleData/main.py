@@ -1,7 +1,6 @@
 # Lamar Undergrad Research
 # Name: Austin Robertson  
 # Date: 10/01/2024
-# Design and train a CNN to detect future deforestation hotspots
 
 import torch
 import torch.nn as nn 
@@ -15,9 +14,9 @@ X_val = pd.read_csv('X_val.csv')
 y_train = pd.read_csv('y_train.csv')
 y_val = pd.read_csv('y_val.csv')
 
-# Convert data to torch tensors
+# Initialize model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Use the CPU as I am using a RTX4070 which is CUDA capabable
-input_size = X_train.shape[1] # 
+input_size = X_train.shape[1] # Extracts number of features (columns) from the training data
 model = SimpleNN(input_size).to(device) # Initialize our model object from the SimpleNN class
 
 # Define loss function and optimizer with L2 regularization
@@ -58,6 +57,8 @@ with torch.no_grad(): # Disable gradients since we won't be adjusting the weight
     val_outputs = model(val_inputs) # Perform a forward pass through the model to get the models prediction after training
     val_loss = criterion(val_outputs, val_labels.unsqueeze(1)) # Compute the loss between the model's predictions and the labels
     print(f'Validation Loss: {val_loss.item()}') # Prints the validation loss for the current epoch
+
+# print(f"Inputs tensor: {inputs}, Labels tensor: {labels}") # Print tensor structure
 
 # Save the trained model
 torch.save(model.state_dict(), 'deforestation_prediction_model.pth') # model.state_dict() contains the model's parameters

@@ -5,14 +5,16 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 import rasterio
+from torchvision.transforms import functional as F
 
 class GeoTIFFChangeDetectionDataset(Dataset):
-    def __init__(self, csv_file_early, csv_file_late, transform=None):
+    # Read in our data from our CSV files
+    def __init__(self, csv_file_early, csv_file_late, resize=(224, 224), normalize=True):
         self.data_frame_early = pd.read_csv(csv_file_early)
         self.data_frame_late = pd.read_csv(csv_file_late)
-        self.transform = transform
+        self.resize = resize
+        self.normalize = normalize
         
-        # Corrected line: added '=' for the 'on' parameter
         self.data = pd.merge(self.data_frame_early, self.data_frame_late, on='Location_ID', suffixes=('_early', '_late'))
         
         valid_data = []
@@ -41,10 +43,8 @@ class GeoTIFFChangeDetectionDataset(Dataset):
         with rasterio.open(img_path_late) as src:
             img_late = src.read().transpose((1, 2, 0))
         
-        img_pair = (img_early, img_late)
-        
-        if self.transform:
-            img_early, img_late = self.transform(img_pair)
+        img_early = self.transform_image(img_early)
+        img_late = self.transform_image(img_late)
         
         label_early = row['Primary_Label_early']
         label_late = row['Primary_Label_late']
@@ -54,9 +54,18 @@ class GeoTIFFChangeDetectionDataset(Dataset):
         
         return (img_early, img_late), label_tensor
 
-def custom_collate_fn(batch):
-    batch = list(filter(lambda x: x is not None, batch))
-    if len(batch) == 0:
-        return None
-    return torch.utils.data.dataloader.default_collate(batch)
+    def transform_image(self, img):
+        # Convert to torch.Tensor
+        img = torch.tensor(img, dtype=torch.float32)
+
+        # Resize
+        img = F.resize(img.permute(2, 0, 1), self.resize)  # Permute to (C, H, W) format
+
+        if self.normalize:
+            num_channels = img.shape[0]
+            mean = torch.tensor([0.485] * num_channels)
+            std = torch.tensor([0.229] * num_channels)
+            img = (img - mean[:, None, None]) / std[:, None, None]
+
+        return img
 

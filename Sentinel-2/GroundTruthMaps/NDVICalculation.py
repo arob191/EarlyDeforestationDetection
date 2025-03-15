@@ -89,14 +89,15 @@ def calculate_ndvi_difference(ndvi_dict1, ndvi_dict2, output_dir, time_period1, 
     print(f"NDVI difference calculated between {time_period1} and {time_period2}.")
 
 # Example usage:
-base_csv_dir = "path_to_csv_directory"  # Directory containing your CSV files
-output_directory = "path_to_output_directory"  # Directory to save NDVI outputs
-time_periods = ["2015-2016", "2017-2018", "2019-2020"]
+base_csv_dir = "C:\Users\Austin\OneDrive\Documents\Personal Projects\GitHub\EarlyDeforestationDetection\Sentinel-2\TimePeriods"  # Directory containing your CSV files
+output_directory = "C:\Users\Austin\OneDrive\Documents\Personal Projects\GitHub\EarlyDeforestationDetection\Sentinel-2\Fazenda_2015_2016_NDVI.csv"  # Directory to save NDVI outputs
+forest = "Fazenda"
+time_periods = ["2015_2016", "2017_2018", "2019_2020"]
 
 # Process NDVI for each time period
 ndvi_data = {}
 for period in time_periods:
-    csv_path = os.path.join(base_csv_dir, f"{period}.csv")  # CSV file for the time period
+    csv_path = os.path.join(base_csv_dir, f"{forest}_{period}.csv")  # CSV file for the time period
     ndvi_data[period] = process_tiles(csv_path, output_directory, period)
 
 # Calculate NDVI differences between consecutive time periods

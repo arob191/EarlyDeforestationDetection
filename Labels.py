@@ -1,10 +1,10 @@
 import pandas as pd
 
 # Load the CSV file into a data frame
-df = pd.read_csv('E:\\Para_Data.csv')
+df = pd.read_csv('E:\\Fazenda.csv')
 
 # Base path and file name pattern
-base_path = 'E:\\Sentinelv3\\Para_2015_2016\\ROI_Para_2017_2018_Tile-v2_'
+base_path = 'E:\\Sentinelv3\\Fazenda Forest\\Fazenda_Manna_2019_2020\\Fazenda_Manna_2019_2020_Tile_'
 file_extension = '.tif'
 
 # Create a list to store the dynamic values
@@ -16,13 +16,16 @@ if len(df) < 100:
     df = pd.concat([df, additional_rows], ignore_index=True)
 
 # Update the first column of the specified number of rows with dynamic values
-df.iloc[:100, 0] = dynamic_values
+df.iloc[:100, 1] = dynamic_values
+
+for i in range(1, 101):
+    df.iloc[i - 1, 0] = i
 
 # Print the first few rows to verify the update
 print(df.head(105))
 
 # Save the updated data frame back to a new CSV file
-output_path = 'C:\\Users\\Austin\\OneDrive\\Documents\\Personal Projects\\GitHub\\EarlyDeforestationDetection\\Para_Data_2017_2018.csv'
+output_path = 'C:\\Users\\Austin\\OneDrive\\Documents\\Personal Projects\\GitHub\\EarlyDeforestationDetection\\Fazenda_2019_2020.csv'
 df.to_csv(output_path, index=False)
 
 print(f"Updated CSV file saved to: {output_path}")

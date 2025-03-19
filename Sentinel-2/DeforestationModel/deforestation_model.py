@@ -146,8 +146,6 @@ def plot_heatmap(heat_map, image_path, title, save_path=None, cmap="hot"):
     else:
         plt.show()
 
-
-# Example Usage
 if __name__ == "__main__":
     image_path = "E:/Sentinelv3/Fazenda Forest/Fazenda_Manna_2015_2016/Fazenda_Manna_2015_2016_Tile_027.tif"
     model_path = "E:/Models/deforestation_model_resnet34_multitask.pth"
@@ -168,4 +166,3 @@ if __name__ == "__main__":
     plot_heatmap(normalized_class_heat_map, image_path, "1-Year Deforestation Risk Heat Map", save_path="1_year_heat_map.png", cmap="hot")
     plot_heatmap(binary_heat_map, image_path, "1-Year High-Risk Areas (Binary)", save_path="1_year_binary_heat_map.png", cmap="gray")
     plot_heatmap(reg_heat_map, image_path, "5-Year Deforestation Change Magnitude", save_path="5_year_heat_map.png", cmap="coolwarm")
-

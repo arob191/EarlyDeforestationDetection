@@ -1,93 +1,73 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.amp import autocast, GradScaler  # Updated AMP imports
 from data_preparation import prepare_data
-from model_definition import get_resnet101_model  # Import the function
+from model_definition import ResNet34MultiTask  # Using ResNet-34 with multitask heads
 import matplotlib.pyplot as plt
+import warnings
+from rasterio.errors import NotGeoreferencedWarning
 
-# Check device (GPU or CPU)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
 
-# 1. File paths for the CSV files
-fazenda_csvs = [
-    "E:/Sentinelv3/Fazenda Forest/Fazenda_2015_2016.csv",
-    "E:/Sentinelv3/Fazenda Forest/Fazenda_2017_2018.csv",
-    "E:/Sentinelv3/Fazenda Forest/Fazenda_2019_2020.csv"
-]
-deforestation_csv = "E:/Sentinelv3/Fazenda Forest/deforestation_data.csv"  # Path to deforestation data CSV
-
-# 2. Prepare the data
-train_loader, val_loader, test_loader = prepare_data(fazenda_csvs, deforestation_csv, batch_size=32)
-
-# 3. Load the ResNet-101 model
-model = get_resnet101_model().to(device)
-
-# 4. Define the loss function and optimizer
-criterion = nn.MSELoss()  # Mean Squared Error for pixel-wise regression
-optimizer = optim.Adam(model.parameters(), lr=0.0001)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.8)
-
-# Early stopping implementation
-class EarlyStopping:
-    def __init__(self, patience=8):
-        self.patience = patience
-        self.counter = 0
-        self.best_val_loss = float("inf")
-        self.early_stop = False
-
-    def __call__(self, val_loss):
-        if val_loss < self.best_val_loss:
-            self.best_val_loss = val_loss
-            self.counter = 0
-        else:
-            self.counter += 1
-            if self.counter >= self.patience:
-                self.early_stop = True
-
-early_stopping = EarlyStopping(patience=8)
-
-# Training loop
-def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, early_stopping, epochs=20):
-    train_losses = []
-    val_losses = []
+# Training function
+def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=20, accumulation_steps=4):
+    train_losses, val_losses = [], []
 
     for epoch in range(epochs):
         model.train()
         train_loss = 0.0
-        for inputs, targets in train_loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            optimizer.zero_grad()
-            outputs = model(inputs)  # Pixel-wise output
-            loss = criterion(outputs, targets)
-            loss.backward()
-            optimizer.step()
+
+        # Training loop
+        optimizer.zero_grad()
+        for i, (inputs, class_targets, reg_targets) in enumerate(train_loader):
+            inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
+
+            with autocast("cuda"):  # Updated autocast
+                class_outputs, reg_outputs = model(inputs)  # Forward pass
+                class_loss = classification_criterion(class_outputs, class_targets)  # Classification loss
+                reg_loss = regression_criterion(reg_outputs, reg_targets)  # Regression loss
+                loss = 0.5 * class_loss + 0.5 * reg_loss  # Combined loss
+                loss = loss / accumulation_steps  # Divide by accumulation steps
+
+            scaler.scale(loss).backward()  # Backpropagation with scaling
+
+            # Gradient accumulation
+            if (i + 1) % accumulation_steps == 0:
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
+
             train_loss += loss.item()
-        
+
         train_loss /= len(train_loader)
         train_losses.append(train_loss)
 
-        # Validation phase
+        # Validation loop
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
-            for inputs, targets in val_loader:
-                inputs, targets = inputs.to(device), targets.to(device)
-                outputs = model(inputs)
-                loss = criterion(outputs, targets)
-                val_loss += loss.item()
-        
+            for inputs, class_targets, reg_targets in val_loader:
+                inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
+
+                with autocast("cuda"):  # Updated autocast
+                    class_outputs, reg_outputs = model(inputs)
+                    class_loss = classification_criterion(class_outputs, class_targets)
+                    reg_loss = regression_criterion(reg_outputs, reg_targets)
+                    val_loss += 0.5 * class_loss.item() + 0.5 * reg_loss.item()
+
         val_loss /= len(val_loader)
         val_losses.append(val_loss)
 
-        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+        # Adjust learning rate
         scheduler.step()
-        early_stopping(val_loss)
-        if early_stopping.early_stop:
-            print(f"Early stopping triggered at epoch {epoch+1}.")
-            break
+
+        # Print losses
+        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
 
     plot_losses(train_losses, val_losses)
 
+# Plot training and validation losses
 def plot_losses(train_losses, val_losses):
     plt.figure(figsize=(10, 6))
     plt.plot(train_losses, label="Train Loss")
@@ -99,27 +79,61 @@ def plot_losses(train_losses, val_losses):
     plt.grid(True)
     plt.show()
 
-# Save the model
-def save_model(model, save_path):
-    torch.save(model.state_dict(), save_path)
-    print(f"Model saved to {save_path}")
-
-# Train the model
-train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, early_stopping, epochs=20)
-save_model(model, "E:/Models/deforestation_model_resnet101.pth")
-
-# Evaluate the model
+# Evaluate the model on the test set
 def evaluate_model(model, test_loader):
     model.eval()
     test_loss = 0.0
     with torch.no_grad():
-        for inputs, targets in test_loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
-            test_loss += loss.item()
-    
+        for inputs, class_targets, reg_targets in test_loader:
+            inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
+
+            with autocast("cuda"):  # Updated autocast
+                class_outputs, reg_outputs = model(inputs)
+                class_loss = classification_criterion(class_outputs, class_targets)
+                reg_loss = regression_criterion(reg_outputs, reg_targets)
+                test_loss += 0.5 * class_loss.item() + 0.5 * reg_loss.item()
+
     test_loss /= len(test_loader)
     print(f"Test Loss: {test_loss:.4f}")
 
-evaluate_model(model, test_loader)
+# Device configuration
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+if __name__ == '__main__':
+    # File paths
+    fazenda_csvs = [
+        "E:/Sentinelv3/Fazenda Forest/Fazenda_2015_2016.csv",
+        "E:/Sentinelv3/Fazenda Forest/Fazenda_2017_2018.csv",
+        "E:/Sentinelv3/Fazenda Forest/Fazenda_2019_2020.csv",
+    ]
+    deforestation_csv = "E:/Sentinelv3/Fazenda Forest/deforestation_data.csv"
+
+    # Prepare the data
+    train_loader, val_loader, test_loader = prepare_data(fazenda_csvs, deforestation_csv, batch_size=16)  # Smaller batch size
+
+    # Load the model
+    model = ResNet34MultiTask(num_classes=1).to(device)
+
+    # Define loss functions
+    classification_criterion = nn.BCEWithLogitsLoss()  # For binary classification
+    regression_criterion = nn.MSELoss()  # For NDVI regression
+
+    # Define optimizer
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+    # Cyclic learning rate scheduler
+    scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-3, step_size_up=2000, mode="triangular2")
+
+    # Mixed precision training setup
+    scaler = GradScaler()
+
+    # Train the model
+    train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=20, accumulation_steps=4)
+
+    # Save the trained model
+    torch.save(model.state_dict(), "E:/Models/deforestation_model_resnet34_multitask.pth")
+    print("Model saved to E:/Models/deforestation_model_resnet34_multitask.pth")
+
+    # Evaluate the model
+    evaluate_model(model, test_loader)
+

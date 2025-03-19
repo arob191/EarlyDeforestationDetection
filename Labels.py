@@ -4,7 +4,7 @@ import pandas as pd
 df = pd.read_csv('E:\\Fazenda.csv')
 
 # Base path and file name pattern
-base_path = 'E:\\Sentinelv3\\Fazenda Forest\\Fazenda_Manna_2019_2020\\Fazenda_Manna_2019_2020_Tile_'
+base_path = 'E:\\Sentinelv3\\Fazenda Forest\\Fazenda_Manna_2023_2024\\Fazenda_Manna_2023_2024_Tile_'
 file_extension = '.tif'
 
 # Create a list to store the dynamic values
@@ -25,8 +25,7 @@ for i in range(1, 101):
 print(df.head(105))
 
 # Save the updated data frame back to a new CSV file
-output_path = 'C:\\Users\\Austin\\OneDrive\\Documents\\Personal Projects\\GitHub\\EarlyDeforestationDetection\\Fazenda_2019_2020.csv'
+output_path = 'E:\\Sentinelv3\\Fazenda Forest\\Fazenda_2023_2024.csv'
 df.to_csv(output_path, index=False)
 
 print(f"Updated CSV file saved to: {output_path}")
-

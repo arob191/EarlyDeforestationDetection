@@ -1,68 +1,74 @@
 import torch
 import torch.nn as nn
-from torchvision.models import resnet101, ResNet101_Weights
 import torch.nn.functional as F
+from torchvision.models import resnet34, ResNet34_Weights
 
-def get_resnet101_model(pretrained_path=None):
-    """
-    Constructs and customizes a ResNet-101 model for pixel-wise deforestation predictions.
-    """
-    # Load the ResNet-101 model with pretrained weights
-    resnet101_model = resnet101(weights=ResNet101_Weights.DEFAULT)
+class ResNet34MultiTask(nn.Module):
+    def __init__(self, num_classes=1):
+        super().__init__()
+        # Load the ResNet-34 backbone with pretrained weights
+        self.backbone = resnet34(weights=ResNet34_Weights.DEFAULT)
 
-    # Modify the first convolutional layer to accept 2 input channels (B4, B8)
-    original_conv1 = resnet101_model.conv1
-    resnet101_model.conv1 = nn.Conv2d(
-        in_channels=2,  # Use 2 channels (B4 and B8)
-        out_channels=original_conv1.out_channels,
-        kernel_size=original_conv1.kernel_size,
-        stride=original_conv1.stride,
-        padding=original_conv1.padding,
-        bias=original_conv1.bias
-    )
-    torch.nn.init.kaiming_normal_(resnet101_model.conv1.weight, mode="fan_out", nonlinearity="relu")
+        # Modify the first convolutional layer to accept 2 input channels (B4, B8)
+        self.backbone.conv1 = nn.Conv2d(
+            in_channels=2,  # 2 input channels
+            out_channels=64,  # Default number of filters in ResNet-34
+            kernel_size=7,
+            stride=2,
+            padding=3,
+            bias=False
+        )
+        torch.nn.init.kaiming_normal_(self.backbone.conv1.weight, mode="fan_out", nonlinearity="relu")
 
-    # Replace the global average pooling layer with an identity layer to preserve spatial dimensions
-    resnet101_model.avgpool = nn.Identity()
+        # Replace the global average pooling layer to preserve spatial dimensions
+        self.backbone.avgpool = nn.Identity()
 
-    # Replace the fully connected (fc) layer with a 1x1 convolution for pixel-wise predictions
-    resnet101_model.fc = nn.Conv2d(
-        in_channels=resnet101_model.fc.in_features,
-        out_channels=1,  # Single output channel (deforestation risk)
-        kernel_size=1
-    )
+        # Classification head for forest loss/growth prediction
+        self.classification_head = nn.Conv2d(
+            in_channels=512,  # Final number of filters from ResNet-34
+            out_channels=num_classes,  # Binary classification (1 channel for loss/growth)
+            kernel_size=1
+        )
+        torch.nn.init.kaiming_normal_(self.classification_head.weight, mode="fan_out", nonlinearity="relu")
 
-    # Overwrite the _forward_impl method to prevent flattening
-    def _forward_impl(self, x):
-        # Standard forward pass up to the final fc layer
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
+        # Regression head for NDVI change prediction
+        self.regression_head = nn.Conv2d(
+            in_channels=512,  # Final number of filters from ResNet-34
+            out_channels=1,  # Output 1 continuous value (NDVI difference) per pixel
+            kernel_size=1
+        )
+        torch.nn.init.kaiming_normal_(self.regression_head.weight, mode="fan_out", nonlinearity="relu")
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+    def forward(self, x):
+        # Store original input size for dynamic upsampling
+        original_size = (x.size(2), x.size(3))  # Height and width of the input image
 
-        x = self.avgpool(x)  # Identity layer; no pooling happens here
-        x = self.fc(x)  # Pass through the 1x1 convolution
+        # ResNet-34 forward pass (shared backbone)
+        x = self.backbone.conv1(x)
+        x = self.backbone.bn1(x)
+        x = self.backbone.relu(x)
+        x = self.backbone.maxpool(x)
 
-        # Upsample the output to match the target size
-        x = F.interpolate(x, size=(256, 256), mode='bilinear', align_corners=False)
-        return x
+        x = self.backbone.layer1(x)
+        x = self.backbone.layer2(x)
+        x = self.backbone.layer3(x)
+        x = self.backbone.layer4(x)
+
+        # Shared feature representation
+        shared_features = self.backbone.avgpool(x)
+
+        # Classification output (sigmoid activation for probabilities)
+        classification_output = self.classification_head(shared_features)
+
+        # Regression output (NDVI differences)
+        regression_output = self.regression_head(shared_features)
+
+        # Dynamically upsample outputs to match input size
+        classification_output = F.interpolate(classification_output, size=original_size, mode='bilinear', align_corners=False)
+        regression_output = F.interpolate(regression_output, size=original_size, mode='bilinear', align_corners=False)
+
+        return classification_output, regression_output
 
 
-    # Replace the default _forward_impl with the custom one
-    resnet101_model._forward_impl = _forward_impl.__get__(resnet101_model, type(resnet101_model))
-
-    # Load pretrained weights, excluding the fc layer (if provided)
-    if pretrained_path:
-        state_dict = torch.load(pretrained_path, map_location=torch.device("cpu"))
-        state_dict = {k: v for k, v in state_dict.items() if not k.startswith("fc.")}
-        resnet101_model.load_state_dict(state_dict, strict=False)
-        print(f"Pretrained weights loaded from {pretrained_path}")
-
-    return resnet101_model
 
 

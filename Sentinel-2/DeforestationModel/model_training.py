@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.amp.grad_scaler import GradScaler
-import  torch.nn.functional as F
+import torch.nn.functional as F
 from torch.amp import autocast
 from data_preparation import prepare_data
 from model_definition import ResNet34MultiTask
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Custom Focal Loss for classification
+# Custom Focal Loss for multi-class classification
 class FocalLoss(nn.Module):
     def __init__(self, alpha=1, gamma=2):
         super(FocalLoss, self).__init__()
@@ -19,13 +19,16 @@ class FocalLoss(nn.Module):
         self.gamma = gamma
 
     def forward(self, inputs, targets):
-        BCE_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none')
-        pt = torch.exp(-BCE_loss)  # Prevents NaN
-        F_loss = self.alpha * (1 - pt) ** self.gamma * BCE_loss
+        # Cross-Entropy Loss for multi-class classification
+        CE_loss = F.cross_entropy(inputs, targets, reduction='none')
+        pt = torch.exp(-CE_loss)  # Probability of the predicted class
+        F_loss = self.alpha * (1 - pt) ** self.gamma * CE_loss
         return F_loss.mean()
 
-
 def plot_losses(train_losses, val_losses):
+    """
+    Plots training and validation loss curves.
+    """
     plt.figure(figsize=(10, 6))
     plt.plot(train_losses, label="Train Loss")
     plt.plot(val_losses, label="Validation Loss")
@@ -36,27 +39,29 @@ def plot_losses(train_losses, val_losses):
     plt.grid(True)
     plt.show()
 
-
 def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=20, accumulation_steps=4):
+    """
+    Trains the multi-task learning model.
+    """
     train_losses, val_losses = [], []
 
     for epoch in range(epochs):
         model.train()
         train_loss = 0.0
 
-        # Training loop
         optimizer.zero_grad()
         for i, (inputs, class_targets, reg_targets) in enumerate(train_loader):
             inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
 
-            # Use the updated autocast
-            with autocast(device_type="cuda", enabled=True):  # 'cuda' as device_type, and 'enabled=True' as boolean
-                class_outputs, reg_outputs = model(inputs)
-                class_loss = classification_criterion(class_outputs, class_targets)
-                reg_loss = regression_criterion(reg_outputs, reg_targets)
-                loss = 0.7 * class_loss + 0.3 * reg_loss  # Weighted loss
+            # Ensure classification targets are in the correct format
+            class_targets = class_targets.squeeze(1).long()  # Convert to integer indices
 
-                loss = loss / accumulation_steps  # Divide by accumulation steps
+            with autocast(device_type="cuda", enabled=True):
+                class_outputs, reg_outputs = model(inputs)
+                class_loss = classification_criterion(class_outputs, class_targets)  # Multi-class classification
+                reg_loss = regression_criterion(reg_outputs, reg_targets)
+                loss = 0.6 * class_loss + 0.4 * reg_loss  # Adjusted loss weights
+                loss = loss / accumulation_steps  # Divide loss by accumulation steps
 
             scaler.scale(loss).backward()
 
@@ -73,72 +78,93 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=20
         # Validation loop
         model.eval()
         val_loss = 0.0
+        correct_predictions, total_predictions = 0, 0
+
         with torch.no_grad():
             for inputs, class_targets, reg_targets in val_loader:
                 inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
+                class_targets = class_targets.squeeze(1).long()
 
-                with autocast("cuda"):
+                with autocast(device_type="cuda", enabled=True):
                     class_outputs, reg_outputs = model(inputs)
                     class_loss = classification_criterion(class_outputs, class_targets)
                     reg_loss = regression_criterion(reg_outputs, reg_targets)
-                    val_loss += 0.7 * class_loss.item() + 0.3 * reg_loss.item()
+                    val_loss += 0.6 * class_loss.item() + 0.4 * reg_loss.item()
+
+                    # Classification Accuracy
+                    predicted_classes = torch.argmax(class_outputs, dim=1)
+                    correct_predictions += (predicted_classes == class_targets).sum().item()
+                    total_predictions += class_targets.numel()
 
         val_loss /= len(val_loader)
         val_losses.append(val_loss)
+        classification_accuracy = correct_predictions / total_predictions
+
+        # Logging
+        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Class Accuracy: {classification_accuracy:.4f}")
 
         scheduler.step()
 
-        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
-
     plot_losses(train_losses, val_losses)
-
 
 def evaluate_model(model, test_loader):
     """
     Evaluates the trained model on the test set.
-
-    Parameters:
-    - model (torch.nn.Module): The trained model.
-    - test_loader (DataLoader): DataLoader for the test dataset.
-
-    Returns:
-    - float: Average test loss.
     """
-    model.eval()  # Set model to evaluation mode
+    model.eval()
     test_loss = 0.0
+    correct_predictions, total_predictions = 0, 0
 
-    with torch.no_grad():  # Disable gradient computation for evaluation
+    with torch.no_grad():
         for inputs, class_targets, reg_targets in test_loader:
             inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
+            class_targets = class_targets.squeeze(1).long()
 
-            with autocast(device_type="cuda", enabled=True):  # Use AMP for evaluation if needed
+            with autocast(device_type="cuda", enabled=True):
                 class_outputs, reg_outputs = model(inputs)
                 class_loss = classification_criterion(class_outputs, class_targets)
                 reg_loss = regression_criterion(reg_outputs, reg_targets)
-                test_loss += 0.7 * class_loss.item() + 0.3 * reg_loss.item()  # Weighted loss
+                test_loss += 0.6 * class_loss.item() + 0.4 * reg_loss.item()
 
-    test_loss /= len(test_loader)  # Average test loss
-    print(f"Test Loss: {test_loss:.4f}")
+                # Classification Accuracy
+                predicted_classes = torch.argmax(class_outputs, dim=1)
+                correct_predictions += (predicted_classes == class_targets).sum().item()
+                total_predictions += class_targets.numel()
+
+    test_loss /= len(test_loader)
+    classification_accuracy = correct_predictions / total_predictions
+    print(f"Test Loss: {test_loss:.4f}, Classification Accuracy: {classification_accuracy:.4f}")
     return test_loss
 
-
 if __name__ == '__main__':
-    # File paths for data
-    fazenda_csvs = [
+    # File paths for all forests and their time periods
+    forest_csvs = [
         "E:/Sentinelv3/Fazenda Forest/Fazenda_2015_2016.csv",
         "E:/Sentinelv3/Fazenda Forest/Fazenda_2017_2018.csv",
         "E:/Sentinelv3/Fazenda Forest/Fazenda_2019_2020.csv",
+        "E:/Sentinelv3/Fazenda Forest/Fazenda_2021_2022.csv",
+        "E:/Sentinelv3/Fazenda Forest/Fazenda_2023_2024.csv",
+        "E:/Sentinelv3/Rio Aruana Forest/Rio_Aruana_2015_2016.csv",
+        "E:/Sentinelv3/Rio Aruana Forest/Rio_Aruana_2017_2018.csv",
+        "E:/Sentinelv3/Rio Aruana Forest/Rio_Aruana_2019_2020.csv",
+        "E:/Sentinelv3/Rio Aruana Forest/Rio_Aruana_2021_2022.csv",
+        "E:/Sentinelv3/Rio Aruana Forest/Rio_Aruana_2023_2024.csv",
+        "E:/Sentinelv3/Para Forest/Para_2015_2016.csv",
+        "E:/Sentinelv3/Para Forest/Para_2017_2018.csv",
+        "E:/Sentinelv3/Para Forest/Para_2019_2020.csv",
+        "E:/Sentinelv3/Para Forest/Para_2021_2022.csv",
+        "E:/Sentinelv3/Para Forest/Para_2023_2024.csv",
     ]
-    deforestation_csv = "E:/Sentinelv3/Fazenda Forest/deforestation_data.csv"
+    deforestation_csv = "E:/Sentinelv3/NDVI_Outputs/deforestation_data.csv"
 
     # Prepare the data
-    train_loader, val_loader, test_loader = prepare_data(fazenda_csvs, deforestation_csv, batch_size=16)
+    train_loader, val_loader, test_loader = prepare_data(forest_csvs, deforestation_csv, batch_size=16)
 
     # Load the model
-    model = ResNet34MultiTask(num_classes=1).to(device)
+    model = ResNet34MultiTask().to(device)
 
     # Define loss functions
-    classification_criterion = FocalLoss(alpha=1, gamma=2)  # Focal Loss for binary classification
+    classification_criterion = FocalLoss(alpha=1, gamma=2)  # Focal Loss for multi-class classification
     regression_criterion = nn.MSELoss()  # MSE for regression
 
     # Define optimizer

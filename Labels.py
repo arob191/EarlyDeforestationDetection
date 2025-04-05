@@ -8,7 +8,11 @@ base_dir = 'E:\\Sentinelv3'
 forest_config = {
     'Rio Aruana Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_',
     'Fazenda Forest': '{forest_base}_Manna_{time_period}\\{forest_base}_Manna_{time_period}_Tile_',
-    'Para Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_'
+    'Para Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_',
+    'Braunlage Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_',
+    'Cariboo Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_',
+    'Fort McMurray Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_',
+    'Sam Houston Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_'
 }
 
 # Time periods for which CSV files are needed

@@ -154,6 +154,26 @@ if __name__ == '__main__':
         "E:/Sentinelv3/Para Forest/Para_2019_2020.csv",
         "E:/Sentinelv3/Para Forest/Para_2021_2022.csv",
         "E:/Sentinelv3/Para Forest/Para_2023_2024.csv",
+        "E:/Sentinelv3/Braunlage Forest/Braunlage_2015_2016.csv",
+        "E:/Sentinelv3/Braunlage Forest/Braunlage_2017_2018.csv",
+        "E:/Sentinelv3/Braunlage Forest/Braunlage_2019_2020.csv",
+        "E:/Sentinelv3/Braunlage Forest/Braunlage_2021_2022.csv",
+        "E:/Sentinelv3/Braunlage Forest/Braunlage_2023_2024.csv",
+        "E:/Sentinelv3/Cariboo Forest/Cariboo_2015_2016.csv",
+        "E:/Sentinelv3/Cariboo Forest/Cariboo_2017_2018.csv",
+        "E:/Sentinelv3/Cariboo Forest/Cariboo_2019_2020.csv",
+        "E:/Sentinelv3/Cariboo Forest/Cariboo_2021_2022.csv",
+        "E:/Sentinelv3/Cariboo Forest/Cariboo_2023_2024.csv",
+        "E:/Sentinelv3/Fort McMurray Forest/Fort_McMurray_2015_2016.csv",
+        "E:/Sentinelv3/Fort McMurray Forest/Fort_McMurray_2017_2018.csv",
+        "E:/Sentinelv3/Fort McMurray Forest/Fort_McMurray_2019_2020.csv",
+        "E:/Sentinelv3/Fort McMurray Forest/Fort_McMurray_2021_2022.csv",
+        "E:/Sentinelv3/Fort McMurray Forest/Fort_McMurray_2023_2024.csv",
+        "E:/Sentinelv3/Sam Houston Forest/Sam_Houston_2015_2016.csv",
+        "E:/Sentinelv3/Sam Houston Forest/Sam_Houston_2017_2018.csv",
+        "E:/Sentinelv3/Sam Houston Forest/Sam_Houston_2019_2020.csv",
+        "E:/Sentinelv3/Sam Houston Forest/Sam_Houston_2021_2022.csv",
+        "E:/Sentinelv3/Sam Houston Forest/Sam_Houston_2023_2024.csv"
     ]
     deforestation_csv = "E:/Sentinelv3/NDVI_Outputs/deforestation_data.csv"
 

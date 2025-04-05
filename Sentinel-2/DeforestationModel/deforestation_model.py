@@ -90,6 +90,27 @@ def plot_heatmap(heat_map, image_path, title, save_path=None, cmap="hot"):
     else:
         plt.show()
 
+def save_heatmap_as_tif(heat_map, reference_image_path, save_path):
+    """
+    Saves a heat map as a GeoTIFF file using the spatial metadata of a reference image.
+
+    Parameters:
+    - heat_map (np.ndarray): The heat map to save.
+    - reference_image_path (str): Path to the reference image for geospatial metadata.
+    - save_path (str): Path to save the GeoTIFF.
+    """
+    with rasterio.open(reference_image_path) as src:
+        meta = src.meta.copy()  # Copy metadata from the reference image
+        meta.update({
+            "dtype": "float32",  # Data type for the heat map
+            "count": 1           # Single-band raster
+        })
+
+    # Write the heat map to a GeoTIFF
+    with rasterio.open(save_path, "w", **meta) as dst:
+        dst.write(heat_map.astype("float32"), 1)  # Write as single-band
+    print(f"Heat map saved as GeoTIFF to {save_path}")
+
 if __name__ == "__main__":
     image_path = "E:/Sentinelv3/Fazenda Forest/Fazenda_Manna_2015_2016/Fazenda_Manna_2015_2016_Tile_027.tif"
     model_path = "E:/Models/deforestation_model_resnet34_multitask.pth"
@@ -98,6 +119,9 @@ if __name__ == "__main__":
 
     # Predict heat maps
     gain_heat_map, stable_heat_map, loss_heat_map, reg_heat_map = predict_deforestation(model, image_path, target_size=(128, 128))
+
+    # Save the regression heat map as a GeoTIFF file
+    save_heatmap_as_tif(reg_heat_map, image_path, "predicted_deforestation_change.tif")
 
     # Plot results
     plot_heatmap(gain_heat_map, image_path, "Vegetation Gain Heat Map", save_path="gain_heat_map.png", cmap="Greens")

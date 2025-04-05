@@ -119,7 +119,11 @@ def save_deforestation_csv(output_dir, deforestation_data):
 if __name__ == '__main__':
     base_dir = 'E:\\Sentinelv3'
     output_base_dir = os.path.join(base_dir, 'NDVI_Outputs')
-    forest_directories = ['Rio Aruana Forest', 'Fazenda Forest', 'Para Forest']
+    forest_directories = [
+        'Rio Aruana Forest', 'Fazenda Forest', 'Para Forest',
+        'Braunlage Forest', 'Cariboo Forest', 'Fort McMurray Forest',
+        'Sam Houston Forest'
+        ]
     time_periods = ['2015_2016', '2017_2018', '2019_2020', '2021_2022', '2023_2024']
 
     ndvi_data = {}

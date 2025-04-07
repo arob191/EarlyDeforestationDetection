@@ -10,7 +10,11 @@ import matplotlib.pyplot as plt
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 from sklearn.metrics import mean_absolute_error, f1_score, confusion_matrix, ConfusionMatrixDisplay
+=======
+from sklearn.metrics import mean_absolute_error, f1_score, confusion_matrix
+>>>>>>> f120c77 (Confusion matrix)
 =======
 from sklearn.metrics import mean_absolute_error, f1_score, confusion_matrix
 >>>>>>> f120c77 (Confusion matrix)
@@ -117,6 +121,7 @@ def visualize_misclassified_samples(misclassified_samples):
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=20, accumulation_steps=4, early_stop_patience=5):
     """
     Trains a multi-task learning model with gradient accumulation, early stopping, and detailed logging.
@@ -135,12 +140,17 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=20
 >>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
+=======
+>>>>>>> f120c77 (Confusion matrix)
 def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2, accumulation_steps=4, early_stop_patience=5):
     """
     Trains the multi-task learning model with early stopping, gradient accumulation,
     and detailed logging for classification and regression metrics.
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
@@ -154,7 +164,11 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     scaler = GradScaler()  # For mixed-precision training
+=======
+    scaler = GradScaler()
+>>>>>>> f120c77 (Confusion matrix)
 =======
     scaler = GradScaler()
 >>>>>>> f120c77 (Confusion matrix)
@@ -171,11 +185,14 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         model.train()
         epoch_train_loss = 0.0
         optimizer.zero_grad()
         opt_step_called = False  # Flag to check if optimizer.step() has been executed in this epoch
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
 =======
@@ -186,6 +203,9 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
         optimizer.zero_grad()
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
@@ -196,6 +216,7 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
             inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
             class_targets = torch.clamp(class_targets.squeeze(1).long(), min=0, max=2)
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -239,6 +260,14 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
                 batch_weights[cls] = 1.0 / (count.item() + 1e-6)
 
 >>>>>>> f120c77 (Confusion matrix)
+=======
+            # Dynamic loss weighting
+            unique_classes, counts = torch.unique(class_targets, return_counts=True)
+            batch_weights = torch.ones(3).to(device)  # Default weights for classes 0, 1, 2
+            for cls, count in zip(unique_classes, counts):
+                batch_weights[cls] = 1.0 / (count.item() + 1e-6)
+
+>>>>>>> f120c77 (Confusion matrix)
             classification_criterion = torch.nn.CrossEntropyLoss(weight=batch_weights)
 
             with autocast(device_type="cuda", enabled=torch.cuda.is_available()):
@@ -249,6 +278,7 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
                 # Dynamic loss weighting for regression — capped to prevent extreme scaling
                 dynamic_loss_weight = max(0.1, min(reg_targets.std().item(), 5.0)) if reg_targets.std().item() > 1e-6 else 1.0
                 loss = (0.6 * class_loss + 0.4 * dynamic_loss_weight * reg_loss) / accumulation_steps
@@ -256,6 +286,13 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
             scaler.scale(loss).backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
+=======
+                # Prevent extreme loss weight values
+                dynamic_loss_weight = max(0.1, min(reg_targets.std().item(), 10))
+                loss = (0.6 * class_loss + 0.4 * dynamic_loss_weight * reg_loss) / accumulation_steps
+
+            scaler.scale(loss).backward()
+>>>>>>> f120c77 (Confusion matrix)
 =======
                 # Prevent extreme loss weight values
                 dynamic_loss_weight = max(0.1, min(reg_targets.std().item(), 10))
@@ -294,9 +331,12 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         epoch_train_loss /= len(train_loader)
         train_losses.append(epoch_train_loss)
 
+=======
+>>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
 =======
@@ -311,6 +351,11 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+        all_class_targets, all_class_preds = [], []
+        misclassified_samples = []
+>>>>>>> f120c77 (Confusion matrix)
 =======
         all_class_targets, all_class_preds = [], []
         misclassified_samples = []
@@ -328,6 +373,7 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
             for i, (inputs, class_targets, reg_targets) in enumerate(val_loader):
                 inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
                 class_targets = torch.clamp(class_targets.squeeze(1).long(), min=0, max=2)
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -350,6 +396,9 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
 
 =======
 
+=======
+
+>>>>>>> f120c77 (Confusion matrix)
 =======
 
 >>>>>>> f120c77 (Confusion matrix)
@@ -443,6 +492,9 @@ def evaluate_model(model, test_loader):
 
                 # Classification Metrics
 <<<<<<< HEAD
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
@@ -452,6 +504,7 @@ def evaluate_model(model, test_loader):
                 all_class_targets.extend(class_targets.cpu().numpy().flatten())
                 all_class_preds.extend(predicted_classes.cpu().numpy().flatten())
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
                 regression_mae_sum += F.l1_loss(reg_outputs, reg_targets).item()
@@ -590,12 +643,15 @@ def evaluate_model(model, test_loader):
 >>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
+=======
+>>>>>>> f120c77 (Confusion matrix)
                 # Regression Metrics
                 regression_mae = F.l1_loss(reg_outputs, reg_targets).item()
                 regression_mae_sum += regression_mae
                 all_reg_targets.extend(reg_targets.cpu().numpy().flatten())
                 all_reg_preds.extend(reg_outputs.cpu().numpy().flatten())
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -609,6 +665,8 @@ def evaluate_model(model, test_loader):
 >>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
+=======
+>>>>>>> f120c77 (Confusion matrix)
         # Debug collected labels
         print(f"Test labels distribution (true): {np.unique(all_class_targets, return_counts=True)}")
         print(f"Test labels distribution (predicted): {np.unique(all_class_preds, return_counts=True)}")
@@ -617,6 +675,9 @@ def evaluate_model(model, test_loader):
     assert len(all_reg_targets) == len(all_reg_preds), "Mismatch in true and predicted regression outputs!"
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
@@ -638,6 +699,7 @@ def evaluate_model(model, test_loader):
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     # Save confusion matrices
     conf_matrix = confusion_matrix(all_class_targets, all_class_preds, labels=[0, 1, 2])
     ConfusionMatrixDisplay(conf_matrix).plot(cmap="viridis")
@@ -647,6 +709,8 @@ def evaluate_model(model, test_loader):
     ConfusionMatrixDisplay(normalized_conf_matrix).plot(cmap="viridis")
     plt.savefig("test_confusion_matrix_normalized.png")
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
 =======
@@ -671,6 +735,9 @@ def evaluate_model(model, test_loader):
         f.write(np.array_str(confusion_matrix(all_class_targets, all_class_preds, labels=[0, 1, 2])))
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
@@ -784,6 +851,9 @@ if __name__ == '__main__':
         "E:/Sentinelv3/Tonkino Forest/Tonkino_2023_2024",
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
@@ -816,6 +886,7 @@ if __name__ == '__main__':
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         model,
         train_loader,
         val_loader,
@@ -824,6 +895,10 @@ if __name__ == '__main__':
         epochs=20,
         accumulation_steps=4,
         early_stop_patience=5
+=======
+        model, train_loader, val_loader, optimizer, scheduler,
+        epochs=20, accumulation_steps=4, early_stop_patience=5
+>>>>>>> f120c77 (Confusion matrix)
 =======
         model, train_loader, val_loader, optimizer, scheduler,
         epochs=20, accumulation_steps=4, early_stop_patience=5

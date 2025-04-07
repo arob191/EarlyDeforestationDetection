@@ -5,10 +5,13 @@ import rasterio
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 from rasterio.enums import Resampling
 from rasterio.warp import calculate_default_transform, reproject
 from scipy.ndimage import distance_transform_edt
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
 =======
@@ -24,6 +27,7 @@ from rasterio.transform import from_origin
 
 warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -53,6 +57,8 @@ def calculate_ndvi_from_multiband(image_path, output_path, target_crs="EPSG:4326
 =======
 =======
 >>>>>>> f120c77 (Confusion matrix)
+=======
+>>>>>>> f120c77 (Confusion matrix)
 # Function to calculate NDVI
 def calculate_ndvi_from_multiband(image_path, output_path, target_crs="EPSG:4326"):
     with rasterio.open(image_path) as src:
@@ -62,6 +68,9 @@ def calculate_ndvi_from_multiband(image_path, output_path, target_crs="EPSG:4326
         # Calculate NDVI
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
@@ -77,6 +86,7 @@ def calculate_ndvi_from_multiband(image_path, output_path, target_crs="EPSG:4326
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         
         # Reproject if source CRS differs from target_crs
         if src.crs != target_crs:
@@ -86,6 +96,8 @@ def calculate_ndvi_from_multiband(image_path, output_path, target_crs="EPSG:4326
             
 =======
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
 
@@ -144,6 +156,7 @@ def calculate_ndvi_from_multiband(image_path, output_path, target_crs="EPSG:4326
             dst.write(ndvi, 1)
     return ndvi
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -227,6 +240,16 @@ def process_tile(row, output_dir, time_period, target_crs="EPSG:4326"):
     tile_id = row['tile_id']
     image_path = row['image_path']
 >>>>>>> f120c77 (Confusion matrix)
+=======
+# Function to calculate distance maps for spatial context
+def calculate_distance_map(binary_map):
+    return distance_transform_edt(binary_map == 0)
+
+# Function to process a single tile
+def process_tile(row, output_dir, time_period, target_crs="EPSG:4326"):
+    tile_id = row['tile_id']
+    image_path = row['image_path']
+>>>>>>> f120c77 (Confusion matrix)
     output_ndvi_path = os.path.join(output_dir, f"{tile_id}_NDVI_{time_period}.tif")
     output_distance_path = os.path.join(output_dir, f"{tile_id}_Distance_{time_period}.tif")
 
@@ -247,6 +270,9 @@ def process_tile(row, output_dir, time_period, target_crs="EPSG:4326"):
         return tile_id, {"ndvi": ndvi, "distance": distance_map}
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
@@ -256,6 +282,7 @@ def process_tile(row, output_dir, time_period, target_crs="EPSG:4326"):
         print(f"File not found: {image_path}")
         return None
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -434,6 +461,8 @@ def main():
 if __name__ == "__main__":
     main()
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
 =======
@@ -686,6 +715,10 @@ if __name__ == '__main__':
     # Save aggregated deforestation data to CSV
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+    save_deforestation_csv(output_base_dir, all_deforestation_data)
+>>>>>>> f120c77 (Confusion matrix)
+=======
     save_deforestation_csv(output_base_dir, all_deforestation_data)
 >>>>>>> f120c77 (Confusion matrix)
 =======

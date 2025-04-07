@@ -12,7 +12,10 @@ forest_config = {
     'Braunlage Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_',
     'Cariboo Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_',
     'Fort McMurray Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_',
-    'Sam Houston Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_'
+    'Sam Houston Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_',
+    'Oblast Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_',
+    'Tonkino Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_',
+    'Iracema Forest': '{forest_base}_{time_period}\\{forest_base}_{time_period}_Tile_'
 }
 
 # Time periods for which CSV files are needed

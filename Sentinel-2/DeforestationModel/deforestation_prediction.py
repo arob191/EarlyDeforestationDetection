@@ -3,37 +3,50 @@ import numpy as np
 import matplotlib.pyplot as plt
 import rasterio
 import torch.nn.functional as F
-from model_definition import ResNet34MultiTask  # Ensure this points to your multitask model
+from model_definition import ResNet50MultiTask  # Ensure this points to your multitask model
+import os
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def load_model(model_path):
     """
-    Loads the trained ResNet-34 multitask model.
+    Loads the trained ResNet-50 multitask model.
     """
-    model = ResNet34MultiTask().to(device)  # Ternary classification outputs 3 channels
+    model = ResNet50MultiTask().to(device)  # Ternary classification outputs 3 channels
     model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True), strict=False)
     model.eval()
     print(f"Model loaded from {model_path}")
     return model
 
-def normalize_input(b4, b8):
+def normalize_input(b4, b8, distance_map=None):
     """
-    Normalizes the input bands based on training distribution.
+    Normalizes the input bands based on training distribution and adds distance map as the third channel if available.
     """
     b4 = (b4.astype("float32") / 10000.0)
     b8 = (b8.astype("float32") / 10000.0)
-    return np.stack([b4, b8], axis=0)
+    
+    if distance_map is None:
+        distance_map = np.zeros_like(b4)  # Use zeroed distance map if not provided
 
-def predict_deforestation(model, image_path, target_size=(128, 128)):
+    return np.stack([b4, b8, distance_map], axis=0)
+
+def predict_deforestation(model, image_path, target_size=(128, 128), distance_map_path=None):
     """
     Generates heat maps of deforestation/growth predictions for a given image.
     """
     with rasterio.open(image_path) as src:
         image = src.read()
     b4, b8 = image[0, :, :], image[3, :, :]
-    normalized_input = normalize_input(b4, b8)
+
+    # Load distance map if available
+    if distance_map_path and os.path.exists(distance_map_path):
+        with rasterio.open(distance_map_path) as dist_src:
+            distance_map = dist_src.read(1)
+    else:
+        distance_map = None
+
+    normalized_input = normalize_input(b4, b8, distance_map)
     image_tensor = torch.tensor(normalized_input).unsqueeze(0).to(device)
     image_tensor = F.interpolate(image_tensor, size=target_size, mode='bilinear', align_corners=False)
 
@@ -46,7 +59,7 @@ def predict_deforestation(model, image_path, target_size=(128, 128)):
 
         # Process ternary classification predictions
         class_heat_map = F.softmax(class_predictions, dim=1).squeeze(0).cpu().numpy()
-        gain_heat_map, stable_heat_map, loss_heat_map = class_heat_map[0], class_heat_map[1], class_heat_map[2]
+        gain_heat_map, stable_heat_map, loss_heat_map = class_heat_map[2], class_heat_map[1], class_heat_map[0]
 
         print(f"Heat map ranges - Gain: ({gain_heat_map.min()}, {gain_heat_map.max()}), "
               f"Stable: ({stable_heat_map.min()}, {stable_heat_map.max()}), "
@@ -113,12 +126,15 @@ def save_heatmap_as_tif(heat_map, reference_image_path, save_path):
 
 if __name__ == "__main__":
     image_path = "E:/Sentinelv3/Fazenda Forest/Fazenda_Manna_2015_2016/Fazenda_Manna_2015_2016_Tile_027.tif"
-    model_path = "E:/Models/deforestation_model_resnet34_multitask.pth"
+    distance_map_path = "E:/Sentinelv3/Distance_Maps/Fazenda_Manna_2015_2016_Tile_027_Distance_Map.tif"
+    model_path = "E:/Models/deforestation_model_resnet50_multitask.pth"
 
     model = load_model(model_path)
 
     # Predict heat maps
-    gain_heat_map, stable_heat_map, loss_heat_map, reg_heat_map = predict_deforestation(model, image_path, target_size=(128, 128))
+    gain_heat_map, stable_heat_map, loss_heat_map, reg_heat_map = predict_deforestation(
+        model, image_path, target_size=(128, 128), distance_map_path=distance_map_path
+    )
 
     # Save the regression heat map as a GeoTIFF file
     save_heatmap_as_tif(reg_heat_map, image_path, "predicted_deforestation_change.tif")

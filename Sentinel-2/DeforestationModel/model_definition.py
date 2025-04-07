@@ -1,18 +1,18 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.models import resnet34, ResNet34_Weights
+from torchvision.models import resnet50, ResNet50_Weights
 
-class ResNet34MultiTask(nn.Module):
-    def __init__(self):
+class ResNet50MultiTask(nn.Module):
+    def __init__(self, in_channels=4):  # Adjusted for additional input channels (e.g., B4, B8, Distance Map)
         super().__init__()
-        # Load the ResNet-34 backbone with pretrained weights
-        self.backbone = resnet34(weights=ResNet34_Weights.DEFAULT)
+        # Load the ResNet-50 backbone with pretrained weights
+        self.backbone = resnet50(weights=ResNet50_Weights.DEFAULT)
 
-        # Modify the first convolutional layer to accept 2 input channels (B4, B8)
+        # Modify the first convolutional layer to accept custom input channels
         self.backbone.conv1 = nn.Conv2d(
-            in_channels=2,  # 2 input channels
-            out_channels=64,  # Default number of filters in ResNet-34
+            in_channels=in_channels,  # Input channels (e.g., B4, B8, and distance map)
+            out_channels=64,
             kernel_size=7,
             stride=2,
             padding=3,
@@ -23,35 +23,33 @@ class ResNet34MultiTask(nn.Module):
         # Replace the global average pooling layer to preserve spatial dimensions
         self.backbone.avgpool = nn.Identity()
 
-        # Shared intermediate layer for efficiency
-        self.shared_head = nn.Conv2d(
-            in_channels=512,  # Final ResNet-34 output
-            out_channels=256,  # Shared representation
-            kernel_size=1
-        )
-        torch.nn.init.kaiming_normal_(self.shared_head.weight, mode="fan_out", nonlinearity="relu")
+        # Deeper shared intermediate layer with residual connections
+        self.shared_head = ResidualSharedHead(2048, 1024, 512)  # Increase mid_channels and set out_channels to 512
 
         # Classification head for forest loss/growth prediction
         self.classification_head = nn.Conv2d(
-            in_channels=256,  # From shared head
-            out_channels=3,   # Ternary classification (3 channels for loss, stable, gain)
-            kernel_size=1
+        in_channels=512,  # Matches the shared head output
+        out_channels=3,   # Ternary classification (loss, stable, gain)
+        kernel_size=1
         )
         torch.nn.init.kaiming_normal_(self.classification_head.weight, mode="fan_out", nonlinearity="relu")
 
         # Regression head for NDVI change prediction
         self.regression_head = nn.Conv2d(
-            in_channels=256,  # From shared head
-            out_channels=1,  # Output 1 continuous value (NDVI difference) per pixel
+            in_channels=512,  # Matches the shared head output
+            out_channels=1,  # Single NDVI regression output
             kernel_size=1
-        )
+        ) 
         torch.nn.init.kaiming_normal_(self.regression_head.weight, mode="fan_out", nonlinearity="relu")
 
+        # Dropout for regularization
+        self.dropout = nn.Dropout(p=0.3)
+
     def forward(self, x):
-        # Store original input size for dynamic upsampling
+        # Store the original input size for dynamic upsampling
         original_size = (x.size(2), x.size(3))  # Height and width of the input image
 
-        # ResNet-34 forward pass (shared backbone)
+        # ResNet-50 forward pass
         x = self.backbone.conv1(x)
         x = self.backbone.bn1(x)
         x = self.backbone.relu(x)
@@ -62,15 +60,16 @@ class ResNet34MultiTask(nn.Module):
         x = self.backbone.layer3(x)
         x = self.backbone.layer4(x)
 
-        # Shared feature representation
+        # Shared feature representation with deeper residual head
         shared_features = self.shared_head(x)
+        shared_features = self.dropout(shared_features)  # Apply dropout
 
-        # Classification output (softmax for ternary classification probabilities)
+        # Classification output (log-softmax for stability)
         classification_output = self.classification_head(shared_features)
-        classification_output = F.softmax(classification_output, dim=1)  # Predict probabilities for 3 classes
+        classification_output = F.log_softmax(classification_output, dim=1)
 
-        # Regression output (NDVI differences)
-        regression_output = self.regression_head(shared_features)
+        # Regression output (tanh for normalized NDVI differences)
+        regression_output = torch.tanh(self.regression_head(shared_features))
 
         # Dynamically upsample outputs to match input size
         classification_output = F.interpolate(classification_output, size=original_size, mode='bilinear', align_corners=True)
@@ -78,6 +77,51 @@ class ResNet34MultiTask(nn.Module):
 
         return classification_output, regression_output
 
+class ResidualSharedHead(nn.Module):
+    """
+    Shared intermediate layer with deeper residual connections.
+    """
+    def __init__(self, in_channels, mid_channels, out_channels):
+        super().__init__()
+        # First residual block
+        self.block1 = nn.Sequential(
+            nn.Conv2d(in_channels, mid_channels, kernel_size=1),
+            nn.BatchNorm2d(mid_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(mid_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_channels, out_channels, kernel_size=1),
+            nn.BatchNorm2d(out_channels),
+        )
 
+        # Second residual block
+        self.block2 = nn.Sequential(
+            nn.Conv2d(out_channels, mid_channels, kernel_size=1),
+            nn.BatchNorm2d(mid_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(mid_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_channels, out_channels, kernel_size=1),
+            nn.BatchNorm2d(out_channels),
+        )
 
+        self.relu = nn.ReLU(inplace=True)
 
+        # Projection for residual connections
+        self.project = nn.Conv2d(in_channels, out_channels, kernel_size=1) if in_channels != out_channels else nn.Identity()
+
+    def forward(self, x):
+        identity = self.project(x)  # Project identity to match out_channels
+
+        # Apply the first residual block
+        out = self.block1(x)
+        out += identity  # Residual connection
+        out = self.relu(out)
+
+        # Apply the second residual block
+        identity = out  # Store intermediate output as new identity
+        out = self.block2(out)
+        out += identity  # Residual connection
+        return self.relu(out)

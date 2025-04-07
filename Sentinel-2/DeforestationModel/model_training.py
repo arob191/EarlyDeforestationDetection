@@ -5,8 +5,12 @@ from torch.amp.grad_scaler import GradScaler
 import torch.nn.functional as F
 from torch.amp import autocast
 from data_preparation import prepare_data
-from model_definition import ResNet34MultiTask
+from model_definition import ResNet50MultiTask
 import matplotlib.pyplot as plt
+from sklearn.metrics import mean_absolute_error, f1_score, confusion_matrix
+import seaborn as sns
+import numpy as np
+from tqdm import tqdm
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -19,52 +23,126 @@ class FocalLoss(nn.Module):
         self.gamma = gamma
 
     def forward(self, inputs, targets):
-        # Cross-Entropy Loss for multi-class classification
         CE_loss = F.cross_entropy(inputs, targets, reduction='none')
-        pt = torch.exp(-CE_loss)  # Probability of the predicted class
-        F_loss = self.alpha * (1 - pt) ** self.gamma * CE_loss
+        pt = torch.exp(-CE_loss)  # Prevents log(0)
+        F_loss = self.alpha * ((1 - pt + 1e-7) ** self.gamma) * CE_loss  # Added small epsilon for stability
         return F_loss.mean()
 
-def plot_losses(train_losses, val_losses):
+def plot_metrics(train_losses, val_losses, classification_accuracies, regression_mae_list):
     """
-    Plots training and validation loss curves.
+    Plots training and validation metrics.
     """
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(14, 8))
+    plt.subplot(2, 1, 1)
     plt.plot(train_losses, label="Train Loss")
-    plt.plot(val_losses, label="Validation Loss")
+    plt.plot(val_losses, label="Val Loss")
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
-    plt.title("Training and Validation Loss Curves")
+    plt.title("Losses")
     plt.legend()
     plt.grid(True)
+
+    plt.subplot(2, 1, 2)
+    plt.plot(classification_accuracies, label="Classification Accuracy")
+    plt.plot(regression_mae_list, label="Regression MAE")
+    plt.xlabel("Epochs")
+    plt.ylabel("Metrics")
+    plt.title("Performance Metrics")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig("training_metrics.png")  # Save the plot for post-training analysis
     plt.show()
 
-def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=20, accumulation_steps=4):
+def save_confusion_matrix(y_true, y_pred, labels, file_path, normalize=False):
     """
-    Trains the multi-task learning model.
+    Saves a confusion matrix plot with optional normalization.
     """
-    train_losses, val_losses = [], []
+    y_true_flat = np.concatenate([arr.flatten() for arr in y_true])
+    y_pred_flat = np.concatenate([arr.flatten() for arr in y_pred])
+    
+    cm = confusion_matrix(y_true_flat, y_pred_flat, labels=labels)
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]  # Normalize to percentages
 
-    for epoch in range(epochs):
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='.2f' if normalize else 'd', cmap='Blues',
+                xticklabels=labels, yticklabels=labels)
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.title("Confusion Matrix" + (" (Normalized)" if normalize else ""))
+    plt.savefig(file_path)
+    plt.close()
+
+def visualize_misclassified_samples(misclassified_samples):
+    """
+    Visualizes misclassified samples.
+    Args:
+        misclassified_samples: List of tuples (input_tensor, true_label, predicted_label).
+    """
+    for i, (input_tensor, true_label, predicted_label) in enumerate(misclassified_samples):
+        plt.figure(figsize=(6, 6))
+        
+        # Handle multi-channel input
+        if input_tensor.shape[0] == 1:  # Single-channel (grayscale)
+            plt.imshow(input_tensor.squeeze().numpy(), cmap='gray')
+        elif input_tensor.shape[0] == 3:  # RGB image
+            rgb_image = np.stack([
+                input_tensor[0, :, :].numpy(),
+                input_tensor[1, :, :].numpy(),
+                input_tensor[2, :, :].numpy()
+            ], axis=-1)
+            rgb_image = (rgb_image - rgb_image.min()) / (rgb_image.max() - rgb_image.min())  # Normalize
+            plt.imshow(rgb_image)
+        else:  # More than 3 channels (e.g., satellite imagery)
+            # Visualize the first channel as an example
+            plt.imshow(input_tensor[0, :, :].numpy(), cmap='gray')
+            plt.title(f"Visualizing Channel 1 of {input_tensor.shape[0]}")
+
+        plt.title(f"True: {true_label}, Predicted: {predicted_label}")
+        plt.axis('off')
+        plt.show()
+
+def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2, accumulation_steps=4, early_stop_patience=5):
+    """
+    Trains the multi-task learning model with early stopping, gradient accumulation,
+    and detailed logging for classification and regression metrics.
+    """
+    train_losses = []
+    val_losses = []
+    classification_accuracies = []
+    regression_mae_list = []
+    scaler = GradScaler()
+    best_val_loss = float('inf')
+    patience_counter = 0
+
+    for epoch in tqdm(range(epochs), desc="Training Progress"):
+        # Training phase
         model.train()
         train_loss = 0.0
-
         optimizer.zero_grad()
+
         for i, (inputs, class_targets, reg_targets) in enumerate(train_loader):
             inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
+            class_targets = torch.clamp(class_targets.squeeze(1).long(), min=0, max=2)
 
-            # Ensure classification targets are in the correct format
-            class_targets = class_targets.squeeze(1).long()  # Convert to integer indices
+            # Dynamic loss weighting
+            unique_classes, counts = torch.unique(class_targets, return_counts=True)
+            batch_weights = torch.ones(3).to(device)  # Default weights for classes 0, 1, 2
+            for cls, count in zip(unique_classes, counts):
+                batch_weights[cls] = 1.0 / (count.item() + 1e-6)
 
-            with autocast(device_type="cuda", enabled=True):
+            classification_criterion = torch.nn.CrossEntropyLoss(weight=batch_weights)
+
+            with autocast(device_type="cuda", enabled=torch.cuda.is_available()):
                 class_outputs, reg_outputs = model(inputs)
-                class_loss = classification_criterion(class_outputs, class_targets)  # Multi-class classification
-                reg_loss = regression_criterion(reg_outputs, reg_targets)
-                loss = 0.6 * class_loss + 0.4 * reg_loss  # Adjusted loss weights
-                loss = loss / accumulation_steps  # Divide loss by accumulation steps
+                class_loss = classification_criterion(class_outputs, class_targets)
+                reg_loss = F.l1_loss(reg_outputs, reg_targets)
+
+                # Prevent extreme loss weight values
+                dynamic_loss_weight = max(0.1, min(reg_targets.std().item(), 10))
+                loss = (0.6 * class_loss + 0.4 * dynamic_loss_weight * reg_loss) / accumulation_steps
 
             scaler.scale(loss).backward()
-
             if (i + 1) % accumulation_steps == 0:
                 scaler.step(optimizer)
                 scaler.update()
@@ -75,66 +153,157 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=20
         train_loss /= len(train_loader)
         train_losses.append(train_loss)
 
-        # Validation loop
+        # Validation phase
         model.eval()
         val_loss = 0.0
         correct_predictions, total_predictions = 0, 0
+        regression_mae_sum = 0.0
+        all_class_targets, all_class_preds = [], []
+        misclassified_samples = []
 
         with torch.no_grad():
             for inputs, class_targets, reg_targets in val_loader:
                 inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
-                class_targets = class_targets.squeeze(1).long()
+                class_targets = torch.clamp(class_targets.squeeze(1).long(), min=0, max=2)
 
-                with autocast(device_type="cuda", enabled=True):
+                with autocast(device_type="cuda", enabled=torch.cuda.is_available()):
                     class_outputs, reg_outputs = model(inputs)
                     class_loss = classification_criterion(class_outputs, class_targets)
-                    reg_loss = regression_criterion(reg_outputs, reg_targets)
-                    val_loss += 0.6 * class_loss.item() + 0.4 * reg_loss.item()
+                    reg_loss = F.l1_loss(reg_outputs, reg_targets)
 
-                    # Classification Accuracy
+                    dynamic_loss_weight = max(0.1, min(reg_targets.std().item(), 10))
+                    val_loss += 0.6 * class_loss.item() + 0.4 * dynamic_loss_weight * reg_loss.item()
+
+                    # Classification Metrics
                     predicted_classes = torch.argmax(class_outputs, dim=1)
                     correct_predictions += (predicted_classes == class_targets).sum().item()
                     total_predictions += class_targets.numel()
 
+                    all_class_targets.extend(class_targets.cpu().numpy())
+                    all_class_preds.extend(predicted_classes.cpu().numpy())
+
+                    # Misclassification tracking
+                    for batch_idx in range(len(inputs)):
+                        pred = predicted_classes[batch_idx].flatten().mode().values.item()
+                        true = class_targets[batch_idx].flatten().mode().values.item()
+                        if true != pred:
+                            misclassified_samples.append((inputs[batch_idx].cpu(), true, pred))
+
+                    regression_mae_sum += F.l1_loss(reg_outputs, reg_targets).item()
+
         val_loss /= len(val_loader)
-        val_losses.append(val_loss)
         classification_accuracy = correct_predictions / total_predictions
+        regression_mae = regression_mae_sum / len(val_loader)
+        val_losses.append(val_loss)
+        classification_accuracies.append(classification_accuracy)
+        regression_mae_list.append(regression_mae)
 
         # Logging
-        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Class Accuracy: {classification_accuracy:.4f}")
+        print(f"Epoch {epoch + 1}/{epochs}: Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, "
+              f"Classification Accuracy: {classification_accuracy:.4f}, Regression MAE: {regression_mae:.4f}")
+
+        # Debug Misclassified Samples
+        print(f"Epoch {epoch + 1}: Misclassified samples: {len(misclassified_samples)}")
+        misclassification_summary = {}
+        for true, pred in [(true, pred) for _, true, pred in misclassified_samples]:
+            misclassification_summary[(true, pred)] = misclassification_summary.get((true, pred), 0) + 1
+        print(f"Misclassification summary: {misclassification_summary}")
+
+        # Save confusion matrix
+        save_confusion_matrix(all_class_targets, all_class_preds, labels=[0, 1, 2], file_path=f"confusion_matrix_epoch_{epoch + 1}.png")
+
+        # Early Stopping and Checkpoint Saving
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save(model.state_dict(), f"E:/Models/deforestation_model_best.pth")
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter >= early_stop_patience:
+                print(f"Early stopping triggered at epoch {epoch + 1}. Best validation loss: {best_val_loss:.4f}")
+                break
 
         scheduler.step()
 
-    plot_losses(train_losses, val_losses)
+    # Plot metrics
+    plot_metrics(train_losses, val_losses, classification_accuracies, regression_mae_list)
 
 def evaluate_model(model, test_loader):
     """
-    Evaluates the trained model on the test set.
+    Evaluates the trained model on the test set, logs detailed results, and saves metrics.
     """
+    print("Starting evaluation...")
     model.eval()
     test_loss = 0.0
     correct_predictions, total_predictions = 0, 0
+    regression_mae_sum = 0.0
+    all_class_targets, all_class_preds = [], []
+    all_reg_targets, all_reg_preds = [], []
 
     with torch.no_grad():
-        for inputs, class_targets, reg_targets in test_loader:
-            inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
-            class_targets = class_targets.squeeze(1).long()
+        from tqdm import tqdm  # Progress bar for evaluation
 
-            with autocast(device_type="cuda", enabled=True):
+        for inputs, class_targets, reg_targets in tqdm(test_loader, desc="Evaluating Batch Progress"):
+            inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
+            class_targets = torch.clamp(class_targets.squeeze(1).long(), min=0, max=2)  # Assume preprocessing outputs valid labels
+
+            with autocast(device_type="cuda", enabled=torch.cuda.is_available()):
                 class_outputs, reg_outputs = model(inputs)
                 class_loss = classification_criterion(class_outputs, class_targets)
                 reg_loss = regression_criterion(reg_outputs, reg_targets)
-                test_loss += 0.6 * class_loss.item() + 0.4 * reg_loss.item()
+                dynamic_loss_weight = max(0.1, min(10.0, 1.0 / (reg_targets.std().item() + 1e-6)))
+                test_loss += 0.6 * class_loss.item() + 0.4 * dynamic_loss_weight * reg_loss.item()
 
-                # Classification Accuracy
+                # Classification Metrics
                 predicted_classes = torch.argmax(class_outputs, dim=1)
                 correct_predictions += (predicted_classes == class_targets).sum().item()
                 total_predictions += class_targets.numel()
+                all_class_targets.extend(class_targets.cpu().numpy().flatten())
+                all_class_preds.extend(predicted_classes.cpu().numpy().flatten())
 
+                # Regression Metrics
+                regression_mae = F.l1_loss(reg_outputs, reg_targets).item()
+                regression_mae_sum += regression_mae
+                all_reg_targets.extend(reg_targets.cpu().numpy().flatten())
+                all_reg_preds.extend(reg_outputs.cpu().numpy().flatten())
+
+        # Debug collected labels
+        print(f"Test labels distribution (true): {np.unique(all_class_targets, return_counts=True)}")
+        print(f"Test labels distribution (predicted): {np.unique(all_class_preds, return_counts=True)}")
+
+    assert len(all_class_targets) == len(all_class_preds), "Mismatch in true and predicted classification labels!"
+    assert len(all_reg_targets) == len(all_reg_preds), "Mismatch in true and predicted regression outputs!"
+
+    # Final metrics
     test_loss /= len(test_loader)
     classification_accuracy = correct_predictions / total_predictions
-    print(f"Test Loss: {test_loss:.4f}, Classification Accuracy: {classification_accuracy:.4f}")
-    return test_loss
+    regression_mae = regression_mae_sum / len(test_loader)
+    f1 = f1_score(all_class_targets, all_class_preds, average="weighted")
+
+    # Log metrics
+    print(f"Test Loss: {test_loss:.4f}")
+    print(f"Classification Accuracy: {classification_accuracy:.4f}")
+    print(f"Classification F1-Score: {f1:.4f}")
+    print(f"Regression MAE: {regression_mae:.4f}")
+
+    # Save results
+    with open("test_results.txt", "w") as f:
+        for i, (true_class, pred_class, true_reg, pred_reg) in enumerate(
+            zip(all_class_targets, all_class_preds, all_reg_targets, all_reg_preds)
+        ):
+            f.write(f"Sample {i}: True Class={true_class}, Pred Class={pred_class}, "
+                    f"True Regression={true_reg:.4f}, Pred Regression={pred_reg:.4f}\n")
+
+    # Save confusion matrix
+    save_confusion_matrix(
+        all_class_targets, all_class_preds, labels=[0, 1, 2], file_path="test_confusion_matrix.png"
+    )
+    save_confusion_matrix(
+        all_class_targets, all_class_preds, labels=[0, 1, 2], file_path="test_confusion_matrix_normalized.png", normalize=True
+    )
+
+    with open("confusion_matrix_summary.txt", "w") as f:
+        f.write(np.array_str(confusion_matrix(all_class_targets, all_class_preds, labels=[0, 1, 2])))
 
 if __name__ == '__main__':
     # File paths for all forests and their time periods
@@ -173,15 +342,32 @@ if __name__ == '__main__':
         "E:/Sentinelv3/Sam Houston Forest/Sam_Houston_2017_2018.csv",
         "E:/Sentinelv3/Sam Houston Forest/Sam_Houston_2019_2020.csv",
         "E:/Sentinelv3/Sam Houston Forest/Sam_Houston_2021_2022.csv",
-        "E:/Sentinelv3/Sam Houston Forest/Sam_Houston_2023_2024.csv"
+        "E:/Sentinelv3/Sam Houston Forest/Sam_Houston_2023_2024.csv",
+        "E:/Sentinelv3/Iracema Forest/Iracema_2015_2016",
+        "E:/Sentinelv3/Iracema Forest/Iracema_2017_2018",
+        "E:/Sentinelv3/Iracema Forest/Iracema_2019_2020",
+        "E:/Sentinelv3/Iracema Forest/Iracema_2021_2022",
+        "E:/Sentinelv3/Iracema Forest/Iracema_2023_2024",
+        "E:/Sentinelv3/Oblast Forest/Oblast_2015_2016",
+        "E:/Sentinelv3/Oblast Forest/Oblast_2017_2018",
+        "E:/Sentinelv3/Oblast Forest/Oblast_2019_2020",
+        "E:/Sentinelv3/Oblast Forest/Oblast_2021_2022",
+        "E:/Sentinelv3/Oblast Forest/Oblast_2023_2024",
+        "E:/Sentinelv3/Tonkino Forest/Tonkino_2015_2016",
+        "E:/Sentinelv3/Tonkino Forest/Tonkino_2017_2018",
+        "E:/Sentinelv3/Tonkino Forest/Tonkino_2019_2020",
+        "E:/Sentinelv3/Tonkino Forest/Tonkino_2021_2022",
+        "E:/Sentinelv3/Tonkino Forest/Tonkino_2023_2024",
     ]
     deforestation_csv = "E:/Sentinelv3/NDVI_Outputs/deforestation_data.csv"
 
     # Prepare the data
+    print("Preparing data...")
     train_loader, val_loader, test_loader = prepare_data(forest_csvs, deforestation_csv, batch_size=16)
 
     # Load the model
-    model = ResNet34MultiTask().to(device)
+    print("Loading model...")
+    model = ResNet50MultiTask(in_channels=4).to(device)  # Ensure input channels align with your data preparation script
 
     # Define loss functions
     classification_criterion = FocalLoss(alpha=1, gamma=2)  # Focal Loss for multi-class classification
@@ -193,16 +379,18 @@ if __name__ == '__main__':
     # Cyclic learning rate scheduler
     scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-3, step_size_up=2000, mode="triangular2")
 
-    # Mixed precision training setup
-    scaler = GradScaler()
-
     # Train the model
-    train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=20, accumulation_steps=4)
+    print("Starting training...")
+    train_model(
+        model, train_loader, val_loader, optimizer, scheduler,
+        epochs=20, accumulation_steps=4, early_stop_patience=5
+    )
 
-    # Save the trained model
-    torch.save(model.state_dict(), "E:/Models/deforestation_model_resnet34_multitask.pth")
-    print("Model saved to E:/Models/deforestation_model_resnet34_multitask.pth")
+    # Save the final trained model
+    final_model_path = "E:/Models/deforestation_model_resnet50_multitask_final.pth"
+    torch.save(model.state_dict(), final_model_path)
+    print(f"Final model saved to {final_model_path}")
 
     # Evaluate the model on the test set
+    print("Evaluating the model on the test set...")
     evaluate_model(model, test_loader)
-

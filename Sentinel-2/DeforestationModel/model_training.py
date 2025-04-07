@@ -8,7 +8,11 @@ from data_preparation import prepare_data
 from model_definition import ResNet50MultiTask
 import matplotlib.pyplot as plt
 <<<<<<< HEAD
+<<<<<<< HEAD
 from sklearn.metrics import mean_absolute_error, f1_score, confusion_matrix, ConfusionMatrixDisplay
+=======
+from sklearn.metrics import mean_absolute_error, f1_score, confusion_matrix
+>>>>>>> f120c77 (Confusion matrix)
 =======
 from sklearn.metrics import mean_absolute_error, f1_score, confusion_matrix
 >>>>>>> f120c77 (Confusion matrix)
@@ -107,6 +111,7 @@ def visualize_misclassified_samples(misclassified_samples):
         plt.show()
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=20, accumulation_steps=4, early_stop_patience=5):
     """
     Trains a multi-task learning model with gradient accumulation, early stopping, and detailed logging.
@@ -121,10 +126,15 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=20
         accumulation_steps (int): Number of steps for gradient accumulation.
         early_stop_patience (int): Number of epochs to wait before early stopping if no improvement.
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
 def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2, accumulation_steps=4, early_stop_patience=5):
     """
     Trains the multi-task learning model with early stopping, gradient accumulation,
     and detailed logging for classification and regression metrics.
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
     """
     train_losses = []
@@ -132,7 +142,11 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
     classification_accuracies = []
     regression_mae_list = []
 <<<<<<< HEAD
+<<<<<<< HEAD
     scaler = GradScaler()  # For mixed-precision training
+=======
+    scaler = GradScaler()
+>>>>>>> f120c77 (Confusion matrix)
 =======
     scaler = GradScaler()
 >>>>>>> f120c77 (Confusion matrix)
@@ -141,21 +155,28 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
 
     for epoch in tqdm(range(epochs), desc="Training Progress"):
 <<<<<<< HEAD
+<<<<<<< HEAD
         model.train()
         epoch_train_loss = 0.0
         optimizer.zero_grad()
         opt_step_called = False  # Flag to check if optimizer.step() has been executed in this epoch
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
         # Training phase
         model.train()
         train_loss = 0.0
         optimizer.zero_grad()
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
 
         for i, (inputs, class_targets, reg_targets) in enumerate(train_loader):
             inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
             class_targets = torch.clamp(class_targets.squeeze(1).long(), min=0, max=2)
 
+<<<<<<< HEAD
 <<<<<<< HEAD
             # Validate input data. If NaN or inf values are detected, skip this batch and save the batch for inspection.
             if torch.isnan(inputs).any():
@@ -181,6 +202,14 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
                 batch_weights[cls] = 1.0 / (count.item() + 1e-6)
 
 >>>>>>> f120c77 (Confusion matrix)
+=======
+            # Dynamic loss weighting
+            unique_classes, counts = torch.unique(class_targets, return_counts=True)
+            batch_weights = torch.ones(3).to(device)  # Default weights for classes 0, 1, 2
+            for cls, count in zip(unique_classes, counts):
+                batch_weights[cls] = 1.0 / (count.item() + 1e-6)
+
+>>>>>>> f120c77 (Confusion matrix)
             classification_criterion = torch.nn.CrossEntropyLoss(weight=batch_weights)
 
             with autocast(device_type="cuda", enabled=torch.cuda.is_available()):
@@ -189,6 +218,7 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
                 reg_loss = F.l1_loss(reg_outputs, reg_targets)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
                 # Dynamic loss weighting for regression — capped to prevent extreme scaling
                 dynamic_loss_weight = max(0.1, min(reg_targets.std().item(), 5.0)) if reg_targets.std().item() > 1e-6 else 1.0
                 loss = (0.6 * class_loss + 0.4 * dynamic_loss_weight * reg_loss) / accumulation_steps
@@ -196,6 +226,13 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
             scaler.scale(loss).backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
+=======
+                # Prevent extreme loss weight values
+                dynamic_loss_weight = max(0.1, min(reg_targets.std().item(), 10))
+                loss = (0.6 * class_loss + 0.4 * dynamic_loss_weight * reg_loss) / accumulation_steps
+
+            scaler.scale(loss).backward()
+>>>>>>> f120c77 (Confusion matrix)
 =======
                 # Prevent extreme loss weight values
                 dynamic_loss_weight = max(0.1, min(reg_targets.std().item(), 10))
@@ -218,9 +255,12 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
             print(f"[DEBUG] No optimizer step was called in epoch {epoch+1}; skipping scheduler.step().")
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         epoch_train_loss /= len(train_loader)
         train_losses.append(epoch_train_loss)
 
+=======
+>>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
         # Validation phase
@@ -229,6 +269,11 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
         correct_predictions, total_predictions = 0, 0
         regression_mae_sum = 0.0
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+        all_class_targets, all_class_preds = [], []
+        misclassified_samples = []
+>>>>>>> f120c77 (Confusion matrix)
 =======
         all_class_targets, all_class_preds = [], []
         misclassified_samples = []
@@ -238,6 +283,7 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
             for i, (inputs, class_targets, reg_targets) in enumerate(val_loader):
                 inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
                 class_targets = torch.clamp(class_targets.squeeze(1).long(), min=0, max=2)
+<<<<<<< HEAD
 <<<<<<< HEAD
                 
                 if torch.isnan(inputs).any():
@@ -256,10 +302,105 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, epochs=2,
 
                 val_loss += 0.6 * class_loss.item() + 0.4 * reg_loss.item()
 
+=======
+
+                with autocast(device_type="cuda", enabled=torch.cuda.is_available()):
+                    class_outputs, reg_outputs = model(inputs)
+                    class_loss = classification_criterion(class_outputs, class_targets)
+                    reg_loss = F.l1_loss(reg_outputs, reg_targets)
+
+                    dynamic_loss_weight = max(0.1, min(reg_targets.std().item(), 10))
+                    val_loss += 0.6 * class_loss.item() + 0.4 * dynamic_loss_weight * reg_loss.item()
+
+                    # Classification Metrics
+                    predicted_classes = torch.argmax(class_outputs, dim=1)
+                    correct_predictions += (predicted_classes == class_targets).sum().item()
+                    total_predictions += class_targets.numel()
+
+                    all_class_targets.extend(class_targets.cpu().numpy())
+                    all_class_preds.extend(predicted_classes.cpu().numpy())
+
+                    # Misclassification tracking
+                    for batch_idx in range(len(inputs)):
+                        pred = predicted_classes[batch_idx].flatten().mode().values.item()
+                        true = class_targets[batch_idx].flatten().mode().values.item()
+                        if true != pred:
+                            misclassified_samples.append((inputs[batch_idx].cpu(), true, pred))
+
+                    regression_mae_sum += F.l1_loss(reg_outputs, reg_targets).item()
+
+        val_loss /= len(val_loader)
+        classification_accuracy = correct_predictions / total_predictions
+        regression_mae = regression_mae_sum / len(val_loader)
+        val_losses.append(val_loss)
+        classification_accuracies.append(classification_accuracy)
+        regression_mae_list.append(regression_mae)
+
+        # Logging
+        print(f"Epoch {epoch + 1}/{epochs}: Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, "
+              f"Classification Accuracy: {classification_accuracy:.4f}, Regression MAE: {regression_mae:.4f}")
+
+        # Debug Misclassified Samples
+        print(f"Epoch {epoch + 1}: Misclassified samples: {len(misclassified_samples)}")
+        misclassification_summary = {}
+        for true, pred in [(true, pred) for _, true, pred in misclassified_samples]:
+            misclassification_summary[(true, pred)] = misclassification_summary.get((true, pred), 0) + 1
+        print(f"Misclassification summary: {misclassification_summary}")
+
+        # Save confusion matrix
+        save_confusion_matrix(all_class_targets, all_class_preds, labels=[0, 1, 2], file_path=f"confusion_matrix_epoch_{epoch + 1}.png")
+
+        # Early Stopping and Checkpoint Saving
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save(model.state_dict(), f"E:/Models/deforestation_model_best.pth")
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter >= early_stop_patience:
+                print(f"Early stopping triggered at epoch {epoch + 1}. Best validation loss: {best_val_loss:.4f}")
+                break
+
+        scheduler.step()
+
+    # Plot metrics
+    plot_metrics(train_losses, val_losses, classification_accuracies, regression_mae_list)
+
+def evaluate_model(model, test_loader):
+    """
+    Evaluates the trained model on the test set, logs detailed results, and saves metrics.
+    """
+    print("Starting evaluation...")
+    model.eval()
+    test_loss = 0.0
+    correct_predictions, total_predictions = 0, 0
+    regression_mae_sum = 0.0
+    all_class_targets, all_class_preds = [], []
+    all_reg_targets, all_reg_preds = [], []
+
+    with torch.no_grad():
+        from tqdm import tqdm  # Progress bar for evaluation
+
+        for inputs, class_targets, reg_targets in tqdm(test_loader, desc="Evaluating Batch Progress"):
+            inputs, class_targets, reg_targets = inputs.to(device), class_targets.to(device), reg_targets.to(device)
+            class_targets = torch.clamp(class_targets.squeeze(1).long(), min=0, max=2)  # Assume preprocessing outputs valid labels
+
+            with autocast(device_type="cuda", enabled=torch.cuda.is_available()):
+                class_outputs, reg_outputs = model(inputs)
+                class_loss = classification_criterion(class_outputs, class_targets)
+                reg_loss = regression_criterion(reg_outputs, reg_targets)
+                dynamic_loss_weight = max(0.1, min(10.0, 1.0 / (reg_targets.std().item() + 1e-6)))
+                test_loss += 0.6 * class_loss.item() + 0.4 * dynamic_loss_weight * reg_loss.item()
+
+                # Classification Metrics
+>>>>>>> f120c77 (Confusion matrix)
                 predicted_classes = torch.argmax(class_outputs, dim=1)
                 correct_predictions += (predicted_classes == class_targets).sum().item()
                 total_predictions += class_targets.numel()
+                all_class_targets.extend(class_targets.cpu().numpy().flatten())
+                all_class_preds.extend(predicted_classes.cpu().numpy().flatten())
 
+<<<<<<< HEAD
                 regression_mae_sum += F.l1_loss(reg_outputs, reg_targets).item()
 =======
 
@@ -392,6 +533,8 @@ def evaluate_model(model, test_loader):
                 all_class_targets.extend(class_targets.cpu().numpy().flatten())
                 all_class_preds.extend(predicted_classes.cpu().numpy().flatten())
 
+=======
+>>>>>>> f120c77 (Confusion matrix)
                 # Regression Metrics
                 regression_mae = F.l1_loss(reg_outputs, reg_targets).item()
                 regression_mae_sum += regression_mae
@@ -399,18 +542,24 @@ def evaluate_model(model, test_loader):
                 all_reg_preds.extend(reg_outputs.cpu().numpy().flatten())
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         # Debug label distributions
         true_dist = np.unique(all_class_targets, return_counts=True)
         pred_dist = np.unique(all_class_preds, return_counts=True)
         print(f"True label proportions: {true_dist}")
         print(f"Predicted label proportions: {pred_dist}")
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
         # Debug collected labels
         print(f"Test labels distribution (true): {np.unique(all_class_targets, return_counts=True)}")
         print(f"Test labels distribution (predicted): {np.unique(all_class_preds, return_counts=True)}")
 
     assert len(all_class_targets) == len(all_class_preds), "Mismatch in true and predicted classification labels!"
     assert len(all_reg_targets) == len(all_reg_preds), "Mismatch in true and predicted regression outputs!"
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
 
     # Final metrics
@@ -426,6 +575,7 @@ def evaluate_model(model, test_loader):
     print(f"Regression MAE: {regression_mae:.4f}")
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     # Save confusion matrices
     conf_matrix = confusion_matrix(all_class_targets, all_class_preds, labels=[0, 1, 2])
     ConfusionMatrixDisplay(conf_matrix).plot(cmap="viridis")
@@ -435,6 +585,8 @@ def evaluate_model(model, test_loader):
     ConfusionMatrixDisplay(normalized_conf_matrix).plot(cmap="viridis")
     plt.savefig("test_confusion_matrix_normalized.png")
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
     # Save results
     with open("test_results.txt", "w") as f:
         for i, (true_class, pred_class, true_reg, pred_reg) in enumerate(
@@ -453,6 +605,9 @@ def evaluate_model(model, test_loader):
 
     with open("confusion_matrix_summary.txt", "w") as f:
         f.write(np.array_str(confusion_matrix(all_class_targets, all_class_preds, labels=[0, 1, 2])))
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
 
 if __name__ == '__main__':
@@ -560,6 +715,9 @@ if __name__ == '__main__':
         "E:/Sentinelv3/Tonkino Forest/Tonkino_2019_2020",
         "E:/Sentinelv3/Tonkino Forest/Tonkino_2021_2022",
         "E:/Sentinelv3/Tonkino Forest/Tonkino_2023_2024",
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
     ]
     deforestation_csv = "E:/Sentinelv3/NDVI_Outputs/deforestation_data.csv"
@@ -586,6 +744,7 @@ if __name__ == '__main__':
     print("Starting training...")
     train_model(
 <<<<<<< HEAD
+<<<<<<< HEAD
         model,
         train_loader,
         val_loader,
@@ -594,6 +753,10 @@ if __name__ == '__main__':
         epochs=20,
         accumulation_steps=4,
         early_stop_patience=5
+=======
+        model, train_loader, val_loader, optimizer, scheduler,
+        epochs=20, accumulation_steps=4, early_stop_patience=5
+>>>>>>> f120c77 (Confusion matrix)
 =======
         model, train_loader, val_loader, optimizer, scheduler,
         epochs=20, accumulation_steps=4, early_stop_patience=5

@@ -29,7 +29,12 @@ def resize_tensor(image_tensor, target_size, mode="bilinear"):
 def apply_augmentation(image_tensor, reg_tensor, ternary_tensor, distance_tensor, target_size):
     """
 <<<<<<< HEAD
+<<<<<<< HEAD
     Applies augmentation to input tensors, including resizing, cropping, flipping, and noise addition.
+=======
+    Applies augmentation techniques like resizing, random cropping, horizontal flipping, 
+    and noise addition to tensors.
+>>>>>>> f120c77 (Confusion matrix)
 =======
     Applies augmentation techniques like resizing, random cropping, horizontal flipping, 
     and noise addition to tensors.
@@ -39,7 +44,11 @@ def apply_augmentation(image_tensor, reg_tensor, ternary_tensor, distance_tensor
     image_tensor = resize_tensor(image_tensor, target_size)
     reg_tensor = resize_tensor(reg_tensor.unsqueeze(0), target_size).squeeze(0)
 <<<<<<< HEAD
+<<<<<<< HEAD
     ternary_tensor = resize_tensor(ternary_tensor.float().unsqueeze(0), target_size, mode="nearest").round().squeeze(0).long()
+=======
+    ternary_tensor = resize_tensor(ternary_tensor.float().unsqueeze(0), target_size, mode="nearest").squeeze(0).long()
+>>>>>>> f120c77 (Confusion matrix)
 =======
     ternary_tensor = resize_tensor(ternary_tensor.float().unsqueeze(0), target_size, mode="nearest").squeeze(0).long()
 >>>>>>> f120c77 (Confusion matrix)
@@ -70,7 +79,11 @@ def apply_augmentation(image_tensor, reg_tensor, ternary_tensor, distance_tensor
     image_tensor = resize_tensor(image_tensor, target_size)
     reg_tensor = resize_tensor(reg_tensor.unsqueeze(0), target_size).squeeze(0)
 <<<<<<< HEAD
+<<<<<<< HEAD
     ternary_tensor = resize_tensor(ternary_tensor.float().unsqueeze(0), target_size, mode="nearest").round().squeeze(0).long()
+=======
+    ternary_tensor = resize_tensor(ternary_tensor.float().unsqueeze(0), target_size, mode="nearest").squeeze(0).long()
+>>>>>>> f120c77 (Confusion matrix)
 =======
     ternary_tensor = resize_tensor(ternary_tensor.float().unsqueeze(0), target_size, mode="nearest").squeeze(0).long()
 >>>>>>> f120c77 (Confusion matrix)
@@ -82,7 +95,11 @@ def apply_augmentation(image_tensor, reg_tensor, ternary_tensor, distance_tensor
 def check_label_balance(ternary_labels):
     """
 <<<<<<< HEAD
+<<<<<<< HEAD
     Checks the distribution of ternary labels across all masks.
+=======
+    Checks the balance of labels across all ternary masks.
+>>>>>>> f120c77 (Confusion matrix)
 =======
     Checks the balance of labels across all ternary masks.
 >>>>>>> f120c77 (Confusion matrix)
@@ -90,6 +107,7 @@ def check_label_balance(ternary_labels):
     ternary_labels_flat = np.concatenate([label.flatten() for label in ternary_labels])
     unique, counts = np.unique(ternary_labels_flat, return_counts=True)
     total = counts.sum()
+<<<<<<< HEAD
 <<<<<<< HEAD
 
     # print("Checking label balance across all ternary masks...")
@@ -105,6 +123,8 @@ def check_ternary_mask_validity(ternary_tensor):
     unique_values = torch.unique(ternary_tensor)
     # print(f"Unique values in ternary mask: {unique_values.tolist()}")  # Debug unique values
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
     proportions = {label: count / total * 100 for label, count in zip(unique, counts)}
 
     print("Checking label balance across all ternary masks...")
@@ -122,6 +142,9 @@ def check_ternary_mask_validity(ternary_tensor):
 
     # # Debug unique values
     # print(f"Unique values in ternary mask: {unique_values.tolist()}")
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
 
     # Valid if at least two unique values are present
@@ -129,6 +152,7 @@ def check_ternary_mask_validity(ternary_tensor):
 
 def create_ternary_tensor(ndvi_diff_resized):
     """
+<<<<<<< HEAD
 <<<<<<< HEAD
     Creates a ternary tensor based on NDVI differences with thresholds for deforestation and gain.
     """
@@ -140,6 +164,8 @@ def create_ternary_tensor(ndvi_diff_resized):
 
     # Debug thresholds and NDVI distribution
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
     Creates a ternary tensor based on NDVI differences using dynamically calculated thresholds.
     Handles cases where NDVI differences contain NaN values.
     """
@@ -151,6 +177,9 @@ def create_ternary_tensor(ndvi_diff_resized):
     gain_threshold = np.percentile(ndvi_diff_resized, 95)
 
     # # Debug thresholds and NDVI distribution
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
     # print(f"Deforestation threshold: {deforestation_threshold}, Gain threshold: {gain_threshold}")
     # print(f"NDVI differences: Min={ndvi_diff_resized.min()}, Max={ndvi_diff_resized.max()}")
@@ -158,15 +187,21 @@ def create_ternary_tensor(ndvi_diff_resized):
     # Create the ternary tensor
     ternary_tensor = torch.where(
 <<<<<<< HEAD
+<<<<<<< HEAD
         torch.tensor(ndvi_diff_resized) < deforestation_threshold, 0,
         torch.where(torch.tensor(ndvi_diff_resized) > gain_threshold, 2, 1)
     )
     # print(f"Unique values in ternary mask: {ternary_tensor.unique().tolist()}")
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
         torch.tensor(ndvi_diff_resized) < deforestation_threshold, 0,  # Class 0: Deforestation
         torch.where(torch.tensor(ndvi_diff_resized) > gain_threshold, 2, 1)  # Class 2: Gain, Class 1: Stable
     )
 
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
     return ternary_tensor
 
@@ -200,10 +235,16 @@ def load_images_and_labels(forest_csvs, deforestation_csv, target_size=(128, 128
                 b4, b8 = image[0, :, :], image[3, :, :]  # B4 (Red) and B8 (NIR)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
                 # Load and clean NDVI difference
                 with rasterio.open(ndvi_diff_path) as ndvi_src:
                     ndvi_diff = ndvi_src.read(1)
                 ndvi_diff = np.nan_to_num(ndvi_diff, nan=0.0)  # Replace NaNs
+=======
+                # Load NDVI difference
+                with rasterio.open(ndvi_diff_path) as ndvi_src:
+                    ndvi_diff = ndvi_src.read(1)
+>>>>>>> f120c77 (Confusion matrix)
 =======
                 # Load NDVI difference
                 with rasterio.open(ndvi_diff_path) as ndvi_src:
@@ -228,6 +269,7 @@ def load_images_and_labels(forest_csvs, deforestation_csv, target_size=(128, 128
                 # Generate the ternary tensor
                 ternary_tensor = create_ternary_tensor(ndvi_diff_resized)
 <<<<<<< HEAD
+<<<<<<< HEAD
 
                 # Check the validity of the ternary mask
                 if not check_ternary_mask_validity(ternary_tensor):
@@ -245,6 +287,8 @@ def load_images_and_labels(forest_csvs, deforestation_csv, target_size=(128, 128
                     continue
 
 =======
+=======
+>>>>>>> f120c77 (Confusion matrix)
 
                 # Check the validity of the ternary mask
                 if not check_ternary_mask_validity(ternary_tensor):
@@ -261,6 +305,9 @@ def load_images_and_labels(forest_csvs, deforestation_csv, target_size=(128, 128
                     image_tensor, reg_tensor, ternary_tensor, torch.tensor(distance_map_resized), target_size=target_size
                 )
 
+<<<<<<< HEAD
+>>>>>>> f120c77 (Confusion matrix)
+=======
 >>>>>>> f120c77 (Confusion matrix)
                 # Append processed data
                 features.append(image_tensor)
@@ -272,10 +319,13 @@ def load_images_and_labels(forest_csvs, deforestation_csv, target_size=(128, 128
                 continue
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     # Debug: Check reg_labels before stacking
     # for i, label in enumerate(reg_labels):
     #     print(f"reg_label[{i}] type: {type(label)}, shape: {label.shape if isinstance(label, torch.Tensor) else None}")
 
+=======
+>>>>>>> f120c77 (Confusion matrix)
 =======
 >>>>>>> f120c77 (Confusion matrix)
     # Stack tensors
@@ -289,6 +339,7 @@ def load_images_and_labels(forest_csvs, deforestation_csv, target_size=(128, 128
     print(f"Total features collected: {len(features)}")
     return features, class_labels, reg_labels
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 def prepare_data(forest_csvs, deforestation_csv, batch_size=16, target_size=(128, 128)):
     """
@@ -393,6 +444,43 @@ def prepare_data(forest_csvs, deforestation_csv, batch_size=16, target_size=(128
     val_set = TensorDataset(features[val_indices], class_labels[val_indices], reg_labels[val_indices])
     test_set = TensorDataset(features[test_indices], class_labels[test_indices], reg_labels[test_indices])
 
+=======
+
+def prepare_data(forest_csvs, deforestation_csv, batch_size=16, target_size=(128, 128)):
+    """
+    Prepares the DataLoaders for training, validation, and testing.
+    Excludes tiles with homogeneous ternary masks during preprocessing.
+
+    Args:
+        forest_csvs (list): List of file paths to forest-specific CSVs.
+        deforestation_csv (str): File path to the deforestation data CSV.
+        batch_size (int): Number of samples per batch for DataLoaders.
+        target_size (tuple): Target size for resizing images and labels.
+
+    Returns:
+        train_loader, val_loader, test_loader (DataLoader): DataLoaders for training, validation, and testing.
+    """
+    # Load and preprocess features, class labels, and regression labels
+    features, class_labels, reg_labels = load_images_and_labels(forest_csvs, deforestation_csv, target_size=target_size)
+
+    # Flatten class labels for stratified split
+    flat_labels = class_labels.squeeze(1).reshape(len(features), -1).float().mean(axis=1).round().to(torch.int)
+
+    # Stratified splitting to preserve class distributions
+    indices = np.arange(len(features))
+    train_indices, temp_indices, _, temp_labels = train_test_split(
+        indices, flat_labels, test_size=0.3, stratify=flat_labels, random_state=42
+    )
+    val_indices, test_indices = train_test_split(
+        temp_indices, test_size=0.5, stratify=temp_labels, random_state=42
+    )
+
+    # Create TensorDatasets for each split
+    train_set = TensorDataset(features[train_indices], class_labels[train_indices], reg_labels[train_indices])
+    val_set = TensorDataset(features[val_indices], class_labels[val_indices], reg_labels[val_indices])
+    test_set = TensorDataset(features[test_indices], class_labels[test_indices], reg_labels[test_indices])
+
+>>>>>>> f120c77 (Confusion matrix)
     # Validate label distributions across splits
     for split_name, split_indices in [("Train", train_indices), ("Validation", val_indices), ("Test", test_indices)]:
         split_labels = flat_labels[split_indices].numpy()

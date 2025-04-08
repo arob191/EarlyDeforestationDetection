@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os
 import pandas as pd
 import numpy as np
@@ -7,6 +6,10 @@ from torch.utils.data import Dataset, DataLoader
 import torch
 from torchvision import transforms
 from PIL import Image
+import warnings
+from rasterio.errors import NotGeoreferencedWarning
+
+warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
 
 class DeforestationDataset(Dataset):
     """
@@ -56,7 +59,10 @@ class DeforestationDataset(Dataset):
         
         # Normalize NDVI difference (using min-max scaling) and convert to uint8
         ndvi_min, ndvi_max = np.min(ndvi_diff), np.max(ndvi_diff)
+        # Normalize ndvi_diff to the 0-255 range.
         ndvi_norm = ((ndvi_diff - ndvi_min) / (ndvi_max - ndvi_min + 1e-6)) * 255.0
+        # Replace NaNs with zeros.
+        ndvi_norm = np.nan_to_num(ndvi_norm, nan=0.0)
         ndvi_norm = ndvi_norm.astype(np.uint8)
         # Convert to a PIL image then to RGB (3 channels)
         pil_ndvi = Image.fromarray(ndvi_norm, mode='L').convert('RGB')

@@ -2,126 +2,107 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import resnet50, ResNet50_Weights
+import warnings
+from rasterio.errors import NotGeoreferencedWarning
 
-class ResNet50MultiTask(nn.Module):
-    def __init__(self, in_channels=4):  # Adjusted for additional input channels (e.g., B4, B8, Distance Map)
-        super().__init__()
-        # Load the ResNet-50 backbone with pretrained weights
-        self.backbone = resnet50(weights=ResNet50_Weights.DEFAULT)
+warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
 
-        # Modify the first convolutional layer to accept custom input channels
-        self.backbone.conv1 = nn.Conv2d(
-            in_channels=in_channels,  # Input channels (e.g., B4, B8, and distance map)
-            out_channels=64,
-            kernel_size=7,
-            stride=2,
-            padding=3,
-            bias=False
-        )
-        torch.nn.init.kaiming_normal_(self.backbone.conv1.weight, mode="fan_out", nonlinearity="relu")
+class DeforestationResNet(nn.Module):
+    def __init__(self, num_seg_classes=3, pretrained=True, use_distance=True):
+        """
+        Args:
+            num_seg_classes (int): Number of segmentation classes.
+            pretrained (bool): If True, load ImageNet pretrained weights using the new API.
+            use_distance (bool): Whether to expect an extra 1-channel distance map (resulting in a 4-channel input).
+        """
+        super(DeforestationResNet, self).__init__()
+        self.use_distance = use_distance
+        input_channels = 4 if self.use_distance else 3
 
-        # Replace the global average pooling layer to preserve spatial dimensions
-        self.backbone.avgpool = nn.Identity()
+        # Use the new weights API.
+        weights = ResNet50_Weights.DEFAULT if pretrained else None
+        resnet = resnet50(weights=weights)
+        
+        # If using an additional distance channel, adjust the first convolutional layer.
+        if input_channels != 3:
+            old_conv = resnet.conv1  # Original conv layer: (64, 3, 7, 7)
+            new_conv = nn.Conv2d(
+                input_channels,
+                old_conv.out_channels,
+                kernel_size=old_conv.kernel_size,
+                stride=old_conv.stride,
+                padding=old_conv.padding,
+                bias=False
+            )
+            # Initialize new_conv weights: copy existing weights for the first 3 channels and replicate for extra channels.
+            with torch.no_grad():
+                new_conv.weight[:, :3] = old_conv.weight
+                new_conv.weight[:, 3:] = old_conv.weight[:, :1].clone()
+            resnet.conv1 = new_conv
 
-        # Deeper shared intermediate layer with residual connections
-        self.shared_head = ResidualSharedHead(2048, 1024, 512)  # Increase mid_channels and set out_channels to 512
+        # Remove the final fully-connected layer.
+        resnet.fc = nn.Identity()
+        self.resnet = resnet
 
-        # Classification head for forest loss/growth prediction
-        self.classification_head = nn.Conv2d(
-        in_channels=512,  # Matches the shared head output
-        out_channels=3,   # Ternary classification (loss, stable, gain)
-        kernel_size=1
-        )
-        torch.nn.init.kaiming_normal_(self.classification_head.weight, mode="fan_out", nonlinearity="relu")
-
-        # Regression head for NDVI change prediction
-        self.regression_head = nn.Conv2d(
-            in_channels=512,  # Matches the shared head output
-            out_channels=1,  # Single NDVI regression output
-            kernel_size=1
-        ) 
-        torch.nn.init.kaiming_normal_(self.regression_head.weight, mode="fan_out", nonlinearity="relu")
-
-        # Dropout for regularization
-        self.dropout = nn.Dropout(p=0.3)
-
-    def forward(self, x):
-        # Store the original input size for dynamic upsampling
-        original_size = (x.size(2), x.size(3))  # Height and width of the input image
-
-        # ResNet-50 forward pass
-        x = self.backbone.conv1(x)
-        x = self.backbone.bn1(x)
-        x = self.backbone.relu(x)
-        x = self.backbone.maxpool(x)
-
-        x = self.backbone.layer1(x)
-        x = self.backbone.layer2(x)
-        x = self.backbone.layer3(x)
-        x = self.backbone.layer4(x)
-
-        # Shared feature representation with deeper residual head
-        shared_features = self.shared_head(x)
-        shared_features = self.dropout(shared_features)  # Apply dropout
-
-        # Classification output (log-softmax for stability)
-        classification_output = self.classification_head(shared_features)
-        classification_output = F.log_softmax(classification_output, dim=1)
-
-        # Regression output (tanh for normalized NDVI differences)
-        regression_output = torch.tanh(self.regression_head(shared_features))
-
-        # Dynamically upsample outputs to match input size
-        classification_output = F.interpolate(classification_output, size=original_size, mode='bilinear', align_corners=True)
-        regression_output = F.interpolate(regression_output, size=original_size, mode='bilinear', align_corners=True)
-
-        return classification_output, regression_output
-
-class ResidualSharedHead(nn.Module):
-    """
-    Shared intermediate layer with deeper residual connections.
-    """
-    def __init__(self, in_channels, mid_channels, out_channels):
-        super().__init__()
-        # First residual block
-        self.block1 = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, kernel_size=1),
-            nn.BatchNorm2d(mid_channels),
+        # Build the segmentation head.
+        self.seg_head = nn.Sequential(
+            nn.Conv2d(2048, 512, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(mid_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mid_channels, out_channels, kernel_size=1),
-            nn.BatchNorm2d(out_channels),
+            nn.Conv2d(512, num_seg_classes, kernel_size=1)
         )
 
-        # Second residual block
-        self.block2 = nn.Sequential(
-            nn.Conv2d(out_channels, mid_channels, kernel_size=1),
-            nn.BatchNorm2d(mid_channels),
+        # Build the regression head.
+        self.reg_head = nn.Sequential(
+            nn.Linear(2048, 512),
             nn.ReLU(inplace=True),
-            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(mid_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mid_channels, out_channels, kernel_size=1),
-            nn.BatchNorm2d(out_channels),
+            nn.Linear(512, 1)
         )
 
-        self.relu = nn.ReLU(inplace=True)
+    def forward(self, ndvi_input, distance=None):
+        """
+        Args:
+            ndvi_input (Tensor): Tensor of shape [N, 3, H, W] - the NDVI difference image.
+            distance (Tensor): Tensor of shape [N, 1, H, W] - the distance map (required if use_distance is True).
+        Returns:
+            seg_output (Tensor): Segmentation output of shape [N, num_seg_classes, H, W].
+            reg_output (Tensor): Regression output of shape [N, 1].
+        """
+        if self.use_distance:
+            if distance is None:
+                raise ValueError("Model expects a distance map, but got None.")
+            # Concatenate the NDVI difference image and distance map along the channel dimension.
+            x = torch.cat([ndvi_input, distance], dim=1)  # Shape: [N, 4, H, W]
+        else:
+            x = ndvi_input
 
-        # Projection for residual connections
-        self.project = nn.Conv2d(in_channels, out_channels, kernel_size=1) if in_channels != out_channels else nn.Identity()
+        # Forward through the ResNet backbone.
+        x = self.resnet.conv1(x)
+        x = self.resnet.bn1(x)
+        x = self.resnet.relu(x)
+        x = self.resnet.maxpool(x)
+        x = self.resnet.layer1(x)
+        x = self.resnet.layer2(x)
+        x = self.resnet.layer3(x)
+        features = self.resnet.layer4(x)  # [N, 2048, H/32, W/32]
 
-    def forward(self, x):
-        identity = self.project(x)  # Project identity to match out_channels
+        # Segmentation branch.
+        seg_logits = self.seg_head(features)  # [N, num_seg_classes, H/32, W/32]
+        seg_output = F.interpolate(seg_logits, scale_factor=32, mode="bilinear", align_corners=False)
 
-        # Apply the first residual block
-        out = self.block1(x)
-        out += identity  # Residual connection
-        out = self.relu(out)
+        # Regression branch.
+        pooled = self.resnet.avgpool(features)  # [N, 2048, 1, 1]
+        pooled = pooled.view(pooled.size(0), -1)  # [N, 2048]
+        reg_output = self.reg_head(pooled)         # [N, 1]
 
-        # Apply the second residual block
-        identity = out  # Store intermediate output as new identity
-        out = self.block2(out)
-        out += identity  # Residual connection
-        return self.relu(out)
+        return seg_output, reg_output
+
+# Simple test for the model.
+if __name__ == '__main__':
+    # Create dummy inputs: NDVI input (3 channels) and distance map (1 channel).
+    ndvi_input = torch.randn(2, 3, 224, 224)
+    distance = torch.randn(2, 1, 224, 224)
+    
+    model = DeforestationResNet(num_seg_classes=3, pretrained=False, use_distance=True)
+    seg_out, reg_out = model(ndvi_input, distance)
+    print("Segmentation output shape:", seg_out.shape)  # Expected: [2, 3, 224, 224]
+    print("Regression output shape:", reg_out.shape)      # Expected: [2, 1]
